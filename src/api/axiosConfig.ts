@@ -37,6 +37,11 @@ apiClient.interceptors.request.use(
     // Inyectamos el header de autorización
     config.headers.Authorization = `Bearer ${token}`;
 
+    const tenant = localStorage.getItem('tenant');
+    if (tenant) {
+      config.headers['X-Tenant-ID'] = tenant;
+    }
+
     return config;
   },
   (error: AxiosError): Promise<never> => {
@@ -67,11 +72,13 @@ apiClient.interceptors.response.use(
     if (isUnauthorized) {
       // Limpiamos credenciales caducadas o inválidas
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem("tenant");
 
       // Redirección dura mediante Window porque el interceptor está fuera del contexto de React Router
       // Esto evita dependencias circulares y asegura que el estado de la aplicación se limpie.
       window.location.href = LOGIN_PATH;
     }
+
 
     return Promise.reject(error);
   },

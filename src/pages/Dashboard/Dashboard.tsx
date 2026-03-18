@@ -7,6 +7,10 @@ import { CreateProductForm } from './components/CreateProductForm';
 import { CreateClientForm } from './components/CreateClientForm';
 import { CreateVentaForm } from './components/CreateVentaForm';
 import { SettingsTab } from './components/SettingsTab';
+import { MonitorPedidosOnline } from './components/MonitorPedidosOnline';
+import { VentasChart } from './components/VentasChart';
+
+
 
 // Fetcher usando nuestro cliente Axios
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
@@ -33,6 +37,18 @@ export const Dashboard: React.FC = () => {
   
   // Configuración Global y Preferencias
   const { data: globalConfig } = useSWR('/config', fetcher);
+  
+  // Filtros Pestaña de Ventas
+  const [filterDesde, setFilterDesde] = useState('');
+  const [filterHasta, setFilterHasta] = useState('');
+  const [filterMetodoPago, setFilterMetodoPago] = useState('');
+  const [filterEstado, setFilterEstado] = useState('');
+  const [page, setPage] = useState(0);
+
+  const { data: ventasPaginadas, mutate: mutateVentasSearch } = useSWR(
+    `/ventas/search?page=${page}&size=10&desde=${filterDesde}&hasta=${filterHasta}&metodoPago=${filterMetodoPago}&estado=${filterEstado}`,
+    fetcher
+  );
 
   // Estado de la Caja
   const { data: cajaEstado, mutate: mutateCajaEstado, isLoading: isLoadingCaja } = useSWR('/caja/estado', fetcher);
@@ -203,11 +219,12 @@ export const Dashboard: React.FC = () => {
     if (montoCierre === '' || Number(montoCierre) < 0) return;
     setIsClosingCaja(true);
     try {
-      await apiClient.post('/caja/cierre', { montoReal: Number(montoCierre) });
+      await apiClient.post('/caja/cierre', { montoFinalReal: Number(montoCierre) });
       await mutateCajaEstado();
       setIsClosingModalOpen(false);
       setMontoCierre('');
       setActiveTab('dashboard');
+
     } catch (error: any) {
       console.error('Error al cerrar caja:', error);
       alert('Error al cerrar la caja. ' + (error.response?.data?.message || ''));
@@ -313,7 +330,17 @@ export const Dashboard: React.FC = () => {
             Dashboard
           </button>
 
+          {/* Acceso Directo Punto de Venta POS */}
           <button
+            onClick={() => navigate('/pos')}
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-black bg-emerald-600 text-white shadow-lg shadow-emerald-500/10 hover:bg-emerald-700 transition-all duration-200 hover:-translate-y-0.5"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+            Punto de Venta (POS)
+          </button>
+
+          <button
+
             onClick={() => setActiveTab('products')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
               activeTab === 'products'
@@ -375,6 +402,7 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
         </nav>
+
 
         <div className="p-6 border-t border-white/5 space-y-3">
           {cajaEstado && (
@@ -610,7 +638,15 @@ export const Dashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Gráfico de Ventas Historial Recharts */}
+              <VentasChart />
+
+              {/* Monitor de Pedidos Online WhatsApp */}
+              <MonitorPedidosOnline />
+
+
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                   <h3 className="text-lg font-bold text-slate-800">Historial de Ventas</h3>
                 </div>
@@ -715,8 +751,98 @@ export const Dashboard: React.FC = () => {
             </div>
           )}
 
+          {/* TAB: VENTAS HISTORIAL */}
+          {activeTab === 'sales' && (
+            <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+               
+               {/* Barra de Filtros */}
+               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-end">
+                 <div className="flex-1 min-w-[150px]">
+                    <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Desde</label>
+                    <input type="date" value={filterDesde} onChange={(e) => { setFilterDesde(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50" />
+                 </div>
+                 <div className="flex-1 min-w-[150px]">
+                    <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Hasta</label>
+                    <input type="date" value={filterHasta} onChange={(e) => { setFilterHasta(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50" />
+                 </div>
+                 <div className="flex-1 min-w-[150px]">
+                    <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Medio de Pago</label>
+                    <select value={filterMetodoPago} onChange={(e) => { setFilterMetodoPago(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50">
+                       <option value="">TODOS</option>
+                       <option value="EFECTIVO">EFECTIVO</option>
+                       <option value="MERCADO_PAGO">MERCADO PAGO</option>
+                    </select>
+                 </div>
+                 <div className="flex-1 min-w-[150px]">
+                    <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Estado</label>
+                    <select value={filterEstado} onChange={(e) => { setFilterEstado(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50">
+                       <option value="">TODOS</option>
+                       <option value="PENDIENTE">PENDIENTE</option>
+                       <option value="PAGADA">PAGADA</option>
+                       <option value="COMPLETADA">COMPLETADA</option>
+                       <option value="ANULADA">ANULADA</option>
+                    </select>
+                 </div>
+                 <button onClick={() => { setFilterDesde(''); setFilterHasta(''); setFilterMetodoPago(''); setFilterEstado(''); setPage(0); }} className="px-5 py-2.5 border border-slate-200 hover:bg-slate-100 text-slate-500 rounded-xl font-bold text-sm transition-all hover:text-slate-700 shadow-sm">
+                   Limpiar
+                 </button>
+               </div>
+
+               {/* Tabla de Ventas Paginadas */}
+               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                 <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-sm text-slate-600">
+                      <thead className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-400 font-bold">
+                        <tr>
+                          <th className="px-6 py-4">Comp. #</th>
+                          <th className="px-6 py-4">Cliente</th>
+                          <th className="px-6 py-4 text-center">Forma Pago</th>
+                          <th className="px-6 py-4 text-center">Estado</th>
+                          <th className="px-6 py-4 text-right">Total Final</th>
+                          <th className="px-6 py-4 text-center">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {ventasPaginadas?.content && ventasPaginadas.content.length > 0 ? (
+                           ventasPaginadas.content.map((col: any) => (
+                             <tr key={col.id} className="hover:bg-slate-50 transition-all duration-200">
+                                <td className="px-6 py-4 font-mono font-bold text-indigo-600">{col.nroComprobante || col.id}</td>
+                                <td className="px-6 py-4 font-bold text-slate-700">{col.cliente ? `${col.cliente.nombre} ${col.cliente.apellido}` : 'Consumidor Final'}</td>
+                                <td className="px-6 py-4 text-center font-bold text-slate-400 text-xs">{col.metodoPago === 'MERCADO_PAGO' ? 'Digital' : 'Efectivo'}</td>
+                                <td className="px-6 py-4 text-center">
+                                  <span className={`px-3 py-1 text-xs font-bold rounded-full border ${
+                                    col.estado === 'PENDIENTE' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                                    col.estado === 'PAGADA' || col.estado === 'COMPLETADA' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
+                                  }`}>{col.estado}</span>
+                                </td>
+                                <td className="px-6 py-4 text-right font-black text-slate-800">${(col.totalFinal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                                <td className="px-6 py-4 text-center">
+                                   <button onClick={() => handleImprimir(col)} className="px-3 py-1.5 bg-slate-800 text-white font-bold text-xs uppercase rounded-lg hover:bg-slate-900 transition-all shadow-sm">Ticket</button>
+                                </td>
+                             </tr>
+                           ))
+                        ) : (
+                           <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No hay ventas registradas que coincidan con la búsqueda.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                 </div>
+                 
+                 {/* Footer Paginacion */}
+                 <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-between items-center text-sm font-bold text-slate-600">
+                   <div>Página {page + 1} de {ventasPaginadas?.totalPages || 1}</div>
+                   <div className="flex gap-2">
+                     <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg disabled:opacity-50 font-black text-xs hover:bg-slate-100 hover:text-slate-800 transition-all shadow-sm">Anterior</button>
+                     <button disabled={page + 1 >= (ventasPaginadas?.totalPages || 1)} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg disabled:opacity-50 font-black text-xs hover:bg-slate-100 hover:text-slate-800 transition-all shadow-sm">Siguiente</button>
+                   </div>
+                 </div>
+               </section>
+            </div>
+          )}
+
           {/* TAB: PREFERENCIAS GLOBALES */}
           {activeTab === 'settings' && (
+
             <SettingsTab />
           )}
 
@@ -818,7 +944,11 @@ export const Dashboard: React.FC = () => {
                     placeholder="0.00"
                   />
                 </div>
+                <p className="mt-2 text-xs font-semibold text-slate-500 bg-slate-100 p-2.5 rounded-lg border border-slate-200 flex items-center gap-1">
+                   💡 Contá todo el efectivo físico en el cajón (incluyendo el monto inicial) y cargalo aquí.
+                </p>
               </div>
+
               
               <div className="flex gap-3">
                 <button

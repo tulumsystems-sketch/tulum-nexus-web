@@ -63,6 +63,8 @@ export const Login: React.FC = () => {
 
       // Almacenamos el JWT devuelto por el servidor
       localStorage.setItem('token', token);
+      localStorage.setItem('tenant', data.tenant); // Inyectamos tenant para el header global
+
 
       // Redirección al Dashboard
       navigate('/dashboard');
