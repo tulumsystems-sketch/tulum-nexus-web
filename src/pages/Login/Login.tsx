@@ -48,25 +48,31 @@ export const Login: React.FC = () => {
 
     try {
       // Petición POST al endpoint de autenticación Multi-Tenant
+      // Pasamos el header X-Tenant-ID manualmente porque aún no está en localStorage
       const response = await apiClient.post('/auth/login', {
         email: data.email,
         password: data.password,
         tenant: data.tenant,
+      }, {
+        headers: {
+          'X-Tenant-ID': data.tenant
+        }
       });
 
-      // Guard Clause: Validación temprana de respuesta
-      const token = response.data?.token || response.data;
+      const token = response.data?.token;
+      const rol = response.data?.rol;
+      const email = response.data?.email;
+
       if (!token || typeof token !== 'string') {
-        setApiError('Respuesta inesperada del servidor. No se recibió el token.');
+        setApiError('Respuesta inesperada del servidor.');
         return;
       }
 
-      // Almacenamos el JWT devuelto por el servidor
       localStorage.setItem('token', token);
-      localStorage.setItem('tenant', data.tenant); // Inyectamos tenant para el header global
+      localStorage.setItem('tenant', data.tenant);
+      localStorage.setItem('rol', rol || 'OPERADOR');
+      localStorage.setItem('email', email || '');
 
-
-      // Redirección al Dashboard
       navigate('/dashboard');
     } catch (error: any) {
       console.error("DETALLE DEL ERROR:", error);

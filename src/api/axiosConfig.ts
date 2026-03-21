@@ -70,13 +70,14 @@ apiClient.interceptors.response.use(
     const isUnauthorized = statusCode === 401 || statusCode === 403;
 
     if (isUnauthorized) {
-      // Limpiamos credenciales caducadas o inválidas
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem("tenant");
-
-      // Redirección dura mediante Window porque el interceptor está fuera del contexto de React Router
-      // Esto evita dependencias circulares y asegura que el estado de la aplicación se limpie.
-      window.location.href = LOGIN_PATH;
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/login') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('tenant');
+        localStorage.removeItem('rol');
+        localStorage.removeItem('email');
+        window.location.href = LOGIN_PATH;
+      }
     }
 
 

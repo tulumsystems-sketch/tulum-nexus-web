@@ -19,6 +19,7 @@ export interface ProductFormInputs {
   medidas?: string;
   categoriaId: number;
   imageUrl?: string;
+  stockMinimo?: number;
 }
 
 /**
@@ -44,6 +45,11 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
     .required('Debes seleccionar una categoría.')
     .positive('Selecciona una categoría válida.'),
   imageUrl: yup.string().url('Debe ser una URL válida').optional(),
+  stockMinimo: yup
+    .number()
+    .transform((value) => (isNaN(value) ? undefined : value))
+    .min(0, 'El stock mínimo no puede ser negativo.')
+    .optional(),
 }) as yup.ObjectSchema<ProductFormInputs>;
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
@@ -75,6 +81,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         cantidadStock: initialData.cantidadStock,
         medidas: initialData.medidas,
         categoriaId: initialData.categoriaId,
+        stockMinimo: initialData.stockMinimo,
       });
       setPreviewUrl(initialData.imageUrl || null);
     } else {
@@ -85,6 +92,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         cantidadStock: undefined,
         medidas: '',
         categoriaId: undefined,
+        stockMinimo: undefined,
       });
       setPreviewUrl(null);
     }
@@ -133,6 +141,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         cantidadStock: data.cantidadStock,
         medidas: data.medidas,
         categoriaId: data.categoriaId,
+        stockMinimo: data.stockMinimo ?? 0,
         imageUrl: finalImageUrl,
       };
 
@@ -266,8 +275,8 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
         </div>
 
-        {/* Fila 3: Precio, Cantidad, Medidas */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        {/* Fila 3: Precio, Cantidad, Medidas, Stock Minimo */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <label className="block mb-1.5 text-sm font-semibold text-slate-700">Precio *</label>
             <div className="relative">
@@ -298,6 +307,20 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
               disabled={isSubmitting}
             />
             {errors.cantidadStock && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.cantidadStock.message}</p>}
+          </div>
+
+          <div>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Stock Mínimo</label>
+            <input
+              type="number"
+              {...register('stockMinimo')}
+              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                errors.stockMinimo ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+              }`}
+              placeholder="0"
+              disabled={isSubmitting}
+            />
+            {errors.stockMinimo && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.stockMinimo.message}</p>}
           </div>
 
           <div>
