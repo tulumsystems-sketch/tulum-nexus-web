@@ -110,9 +110,8 @@ export const MonitorPedidosOnline: React.FC = () => {
             return (
               <div
                 key={v.id}
-                className={`relative overflow-hidden bg-white border border-slate-200 rounded-xl shadow-sm transition-all duration-300 hover:shadow-md border-l-4 ${
-                  estaDespachado ? 'border-l-slate-400 opacity-75' : 'border-l-emerald-500'
-                }`}
+                className={`relative overflow-hidden bg-white border border-slate-200 rounded-xl shadow-sm transition-all duration-300 hover:shadow-md border-l-4 ${estaDespachado ? 'border-l-slate-400 opacity-75' : 'border-l-emerald-500'
+                  }`}
               >
                 {estaDespachado && (
                   <div className="absolute top-3 right-3 bg-slate-100 text-slate-600 font-bold text-[10px] uppercase items-center gap-1 tracking-widest px-2.5 py-1 rounded-full border border-slate-200 flex">
@@ -150,11 +149,10 @@ export const MonitorPedidosOnline: React.FC = () => {
                     <button
                       onClick={() => handleConfirmarDespacho(v.id)}
                       disabled={estaDespachado}
-                      className={`w-full py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
-                        estaDespachado
+                      className={`w-full py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${estaDespachado
                           ? 'bg-slate-50 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none'
                           : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-emerald-500/20 shadow-lg shadow-emerald-500/10'
-                      }`}
+                        }`}
                     >
                       {estaDespachado ? 'Orden Despachada' : 'Confirmar Despacho'}
                     </button>

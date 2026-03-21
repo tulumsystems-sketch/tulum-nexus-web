@@ -5,20 +5,26 @@ import apiClient from '../../api/axiosConfig';
 import { CreateCategoryForm } from './components/CreateCategoryForm';
 import { CreateProductForm } from './components/CreateProductForm';
 import { CreateClientForm } from './components/CreateClientForm';
-import { CreateVentaForm } from './components/CreateVentaForm';
 import { SettingsTab } from './components/SettingsTab';
 import { MonitorPedidosOnline } from './components/MonitorPedidosOnline';
 import { VentasChart } from './components/VentasChart';
+import { UsuariosTab } from './components/UsuariosTab';
+import { RemitosTab } from './components/RemitosTab';
+import { AlertasStock } from './components/AlertasStock';
 
 
 
 // Fetcher usando nuestro cliente Axios
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
-type TabType = 'dashboard' | 'categories' | 'products' | 'clients' | 'sales' | 'settings';
+type TabType = 'dashboard' | 'categories' | 'products' | 'clients' | 'sales' | 'settings' | 'usuarios' | 'remitos';
 
 export const Dashboard: React.FC = () => {
+  const token = localStorage.getItem('token');
   const navigate = useNavigate();
+  const rol = localStorage.getItem('rol');
+  const esAdmin = rol === 'ADMIN';
+
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [montoInicial, setMontoInicial] = useState<number | ''>('');
@@ -29,14 +35,14 @@ export const Dashboard: React.FC = () => {
   
   console.log('--- DASHBOARD RENDER --- Tab Activa:', activeTab);
 
-  // SWR Asíncrono puro
-  const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR('/categorias', fetcher);
-  const { data: productos, error: errorProductos, isLoading: isLoadingProductos, mutate: mutateProductos } = useSWR('/productos', fetcher);
-  const { data: clientes, error: errorClientes, isLoading: isLoadingClientes, mutate: mutateClientes } = useSWR('/clientes', fetcher);
-  const { data: ventas, error: errorVentas, isLoading: isLoadingVentas, mutate: mutateVentas } = useSWR('/ventas', fetcher);
+  // SWR Asíncrono puro - Solo disparar si hay token para evitar loops de 401/403
+  const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token ? '/categorias' : null, fetcher);
+  const { data: productos, error: errorProductos, isLoading: isLoadingProductos, mutate: mutateProductos } = useSWR(token ? '/productos' : null, fetcher);
+  const { data: clientes, error: errorClientes, isLoading: isLoadingClientes, mutate: mutateClientes } = useSWR(token ? '/clientes' : null, fetcher);
+  const { data: ventas, error: errorVentas, isLoading: isLoadingVentas, mutate: mutateVentas } = useSWR(token ? '/ventas' : null, fetcher);
   
   // Configuración Global y Preferencias
-  const { data: globalConfig } = useSWR('/config', fetcher);
+  const { data: globalConfig } = useSWR(token ? '/config' : null, fetcher);
   
   // Filtros Pestaña de Ventas
   const [filterDesde, setFilterDesde] = useState('');
@@ -45,13 +51,18 @@ export const Dashboard: React.FC = () => {
   const [filterEstado, setFilterEstado] = useState('');
   const [page, setPage] = useState(0);
 
-  const { data: ventasPaginadas, mutate: mutateVentasSearch } = useSWR(
-    `/ventas/search?page=${page}&size=10&desde=${filterDesde}&hasta=${filterHasta}&metodoPago=${filterMetodoPago}&estado=${filterEstado}`,
+  const { data: ventasPaginadas } = useSWR(
+    token ? `/ventas/search?page=${page}&size=10&desde=${filterDesde}&hasta=${filterHasta}&metodoPago=${filterMetodoPago}&estado=${filterEstado}` : null,
     fetcher
   );
 
   // Estado de la Caja
-  const { data: cajaEstado, mutate: mutateCajaEstado, isLoading: isLoadingCaja } = useSWR('/caja/estado', fetcher);
+  const { data: cajaEstado, mutate: mutateCajaEstado, isLoading: isLoadingCaja } = useSWR(token ? '/caja/estado' : null, fetcher);
+
+  // Verificación de seguridad ANTES de cualquier renderizado pero DESPUÉS de todos los Hooks
+  if (!token) {
+    return null; // El ProtectedRoute se encarga del redirect
+  }
 
   const handleLogout = (): void => {
     localStorage.removeItem('token');
@@ -61,7 +72,6 @@ export const Dashboard: React.FC = () => {
   const handleCategoryCreated = async () => await mutateCategorias();
   const handleProductCreated = async () => await mutateProductos();
   const handleClientCreated = async () => await mutateClientes();
-  const handleVentaCreated = async () => await mutateVentas();
 
   const handleDeleteProduct = async (id: number) => {
     if (!window.confirm('¿Desea eliminar este producto del inventario?')) return;
@@ -270,6 +280,8 @@ export const Dashboard: React.FC = () => {
     clients: 'Directorio de Clientes',
     sales: 'Punto de Venta (POS)',
     settings: 'Configuración del Tenant',
+    usuarios: 'Gestión de Usuarios',
+    remitos: 'Remitos y Entregas',
   };
 
   // Cálculo de Métricas (Stat Cards) & Resumen de Caja
@@ -376,6 +388,23 @@ export const Dashboard: React.FC = () => {
             Directorio Clientes
           </button>
 
+          {esAdmin && (
+            <button
+              onClick={() => setActiveTab('usuarios')}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                activeTab === 'usuarios'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Gestión Usuarios
+            </button>
+          )}
+
           <button
             onClick={() => setActiveTab('sales')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -388,24 +417,38 @@ export const Dashboard: React.FC = () => {
             Ventas / POS
           </button>
 
-          <div className="pt-2 border-t border-white/5">
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                activeTab === 'settings'
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-              Configuración
-            </button>
-          </div>
+          <button
+            onClick={() => setActiveTab('remitos')}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+              activeTab === 'remitos'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                : 'text-slate-400 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"></path></svg>
+            Hojas de Ruta
+          </button>
+
+          {esAdmin && (
+            <div className="pt-2 border-t border-white/5">
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                  activeTab === 'settings'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Configuración
+              </button>
+            </div>
+          )}
         </nav>
 
 
         <div className="p-6 border-t border-white/5 space-y-3">
-          {cajaEstado && (
+          {cajaEstado && esAdmin && (
             <button
               onClick={() => setIsClosingModalOpen(true)}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-amber-500 transition-colors bg-amber-500/10 rounded-xl hover:bg-amber-500 hover:text-white"
@@ -602,6 +645,12 @@ export const Dashboard: React.FC = () => {
             </div>
           )}
 
+          {/* TAB: USUARIOS */}
+          {activeTab === 'usuarios' && <UsuariosTab />}
+
+          {/* TAB: REMITOS */}
+          {activeTab === 'remitos' && <RemitosTab />}
+
           {/* TAB: DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -640,6 +689,9 @@ export const Dashboard: React.FC = () => {
 
               {/* Gráfico de Ventas Historial Recharts */}
               <VentasChart />
+
+              {/* Alertas de Stock Mínimo */}
+              <AlertasStock />
 
               {/* Monitor de Pedidos Online WhatsApp */}
               <MonitorPedidosOnline />
