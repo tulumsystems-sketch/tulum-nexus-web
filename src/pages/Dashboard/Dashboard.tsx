@@ -32,8 +32,6 @@ export const Dashboard: React.FC = () => {
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [montoCierre, setMontoCierre] = useState<number | ''>('');
   const [isClosingCaja, setIsClosingCaja] = useState(false);
-  
-  console.log('--- DASHBOARD RENDER --- Tab Activa:', activeTab);
 
   // SWR Asíncrono puro - Solo disparar si hay token para evitar loops de 401/403
   const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token ? '/categorias' : null, fetcher);
@@ -281,7 +279,7 @@ export const Dashboard: React.FC = () => {
     sales: 'Punto de Venta (POS)',
     settings: 'Configuración del Tenant',
     usuarios: 'Gestión de Usuarios',
-    remitos: 'Remitos y Entregas',
+    remitos: 'Hojas de Ruta',
   };
 
   // Cálculo de Métricas (Stat Cards) & Resumen de Caja
@@ -902,7 +900,7 @@ export const Dashboard: React.FC = () => {
       </main>
 
       {/* Modal de Bloqueo de Caja */}
-      {!isLoadingCaja && !cajaEstado && (
+      {!isLoadingCaja && !cajaEstado && !esAdmin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
           <div className="w-full max-w-sm p-8 bg-white shadow-2xl rounded-2xl animate-in zoom-in-95 duration-300">
             <div className="flex justify-center mb-6">

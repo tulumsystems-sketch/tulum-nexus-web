@@ -368,7 +368,7 @@ export const POS: React.FC = () => {
               disabled={cart.length === 0}
               className="w-full py-4 text-base font-bold text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 active:translate-y-0.5"
             >
-               Finalizar Venta (Foc. Drawer)
+               Finalizar Venta
             </button>
          </div>
       </div>
