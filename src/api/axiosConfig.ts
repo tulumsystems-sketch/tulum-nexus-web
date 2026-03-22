@@ -71,7 +71,13 @@ apiClient.interceptors.response.use(
 
     if (isUnauthorized) {
       const currentPath = window.location.pathname;
-      if (currentPath !== '/login') {
+      const token = localStorage.getItem('token');
+      
+      // Solo redirigir si no hay token Y no estamos ya en login
+      if (!token && currentPath !== '/login') {
+        window.location.href = LOGIN_PATH;
+      } else if (token && currentPath !== '/login') {
+        // Hay token pero el request falló — limpiar y redirigir
         localStorage.removeItem('token');
         localStorage.removeItem('tenant');
         localStorage.removeItem('rol');
