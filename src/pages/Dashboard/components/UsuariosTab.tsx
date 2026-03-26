@@ -109,7 +109,7 @@ export const UsuariosTab: React.FC = () => {
     <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Formulario de Creación */}
-      <section className="p-6 bg-white border shadow-sm border-slate-200 rounded-2xl">
+      <section className="p-4 sm:p-6 bg-white border shadow-sm border-slate-200 rounded-2xl">
         <h3 className="mb-4 text-lg font-bold text-slate-800">Registrar Nuevo Usuario</h3>
 
         {apiError && (
@@ -170,7 +170,7 @@ export const UsuariosTab: React.FC = () => {
 
       {/* Tabla de Usuarios */}
       <section className="overflow-hidden bg-white border shadow-sm rounded-2xl border-slate-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50 border-slate-200">
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b bg-slate-50 border-slate-200">
           <h3 className="text-lg font-bold text-slate-800">Usuarios del Tenant</h3>
           <span className="px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-100 rounded-full">
             {Array.isArray(usuarios) ? usuarios.length : 0} Registrados
