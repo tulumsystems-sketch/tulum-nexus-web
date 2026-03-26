@@ -66,7 +66,7 @@ export const CreateCategoryForm: React.FC<CreateCategoryProps> = ({ onCategoryCr
   };
 
   return (
-    <div className="p-6 mb-8 bg-white rounded-lg shadow-sm w-full">
+    <div className="p-4 sm:p-6 mb-8 bg-white rounded-lg shadow-sm w-full">
       <h2 className="mb-4 text-xl font-semibold text-gray-700">Crear Nueva Categoría</h2>
       
       {apiError && (

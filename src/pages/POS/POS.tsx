@@ -38,6 +38,7 @@ export const POS: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false); // Cambiado a Drawer
+  const [showMobileCart, setShowMobileCart] = useState(false);
   const [metodoPago, setMetodoPago] = useState<'EFECTIVO' | 'MERCADO_PAGO'>('MERCADO_PAGO');
   const [montoAbonado, setMontoAbonado] = useState<number | ''>('');
   const [apiError, setApiError] = useState<string | null>(null);
@@ -234,17 +235,18 @@ export const POS: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-screen flex bg-slate-100 font-sans text-slate-800 overflow-hidden relative">
+    <div className="h-screen w-screen flex flex-col md:flex-row bg-slate-100 font-sans text-slate-800 overflow-hidden relative">
       
       {/* Lado Izquierdo: Buscador + Grilla (Modo Zen) */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50">
-         <header className="px-6 py-5 bg-white border-b border-slate-200 flex items-center gap-4 sticky top-0 z-10 flex-shrink-0 shadow-sm">
+         <header className="px-3 py-3 md:px-6 md:py-5 bg-white border-b border-slate-200 flex items-center gap-2 md:gap-4 sticky top-0 z-10 flex-shrink-0 shadow-sm">
            <button 
              onClick={() => navigate('/dashboard')}
-             className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl hover:bg-red-50 hover:border-red-100 hover:text-red-500 text-slate-500 transition-all font-bold text-xs flex items-center gap-1.5 shadow-sm"
+             className="px-2 py-2 md:px-3 bg-slate-100 border border-slate-200 rounded-xl hover:bg-red-50 hover:border-red-100 hover:text-red-500 text-slate-500 transition-all font-bold text-xs flex items-center gap-1 md:gap-1.5 shadow-sm flex-shrink-0"
              title="Volver"
            >
-             <ArrowLeft className="w-4 h-4" /> Dashboard
+             <ArrowLeft className="w-4 h-4" />
+             <span className="hidden sm:inline">Dashboard</span>
            </button>
 
            <div className="flex-1 relative">
@@ -252,23 +254,23 @@ export const POS: React.FC = () => {
               <input 
                 ref={searchInputRef}
                 type="text" 
-                placeholder="Presiona F2 para buscar productos..."
+                placeholder="Buscar productos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3.5 rounded-2xl border-2 border-slate-100 focus:border-blue-500 outline-none transition-all text-sm font-bold bg-slate-50 focus:bg-white shadow-inner"
+                className="w-full pl-10 md:pl-12 pr-4 py-2.5 md:py-3.5 rounded-2xl border-2 border-slate-100 focus:border-blue-500 outline-none transition-all text-sm font-bold bg-slate-50 focus:bg-white shadow-inner"
               />
-              <span className="absolute right-4 top-4 text-[10px] font-black bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-md">F2</span>
+              <span className="absolute right-4 top-3 md:top-4 text-[10px] font-black bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-md hidden sm:inline">F2</span>
            </div>
          </header>
 
          {/* Grid de Productos Scrollable */}
-         <div className="flex-1 overflow-y-auto p-6 min-h-0">
+         <div className="flex-1 overflow-y-auto p-3 md:p-6 min-h-0 pb-24 md:pb-6">
            {isLoadingProductos ? (
               <div className="flex items-center justify-center h-full text-slate-400/80 text-sm font-medium animate-pulse">
                  <Clock className="w-5 h-5 animate-spin text-blue-500 mr-2" /> Cargando catálogo...
               </div>
            ) : Array.isArray(productos) && productos.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-5">
                  {productos.map((p: Producto) => (
                     <button
                       key={p.id}
@@ -287,9 +289,9 @@ export const POS: React.FC = () => {
                         )}
                       </div>
 
-                      <div className="p-4 bg-white w-full border-t border-slate-100">
-                         <h4 className="font-bold text-sm text-slate-800 line-clamp-1 mb-1 group-hover:text-blue-600 transition-colors">{p.nombre}</h4>
-                         <p className="text-blue-600 font-extrabold text-base">${Number(p.precio).toFixed(2)}</p>
+                      <div className="p-2.5 md:p-4 bg-white w-full border-t border-slate-100">
+                         <h4 className="font-bold text-xs md:text-sm text-slate-800 line-clamp-1 mb-0.5 md:mb-1 group-hover:text-blue-600 transition-colors">{p.nombre}</h4>
+                         <p className="text-blue-600 font-extrabold text-sm md:text-base">${Number(p.precio).toFixed(2)}</p>
                       </div>
                     </button>
                  ))}
@@ -302,9 +304,37 @@ export const POS: React.FC = () => {
          </div>
       </div>
 
+      {/* Floating Cart Button (mobile only) */}
+      <button
+        onClick={() => setShowMobileCart(true)}
+        className="md:hidden fixed bottom-6 right-6 z-30 w-16 h-16 bg-blue-600 text-white rounded-full shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 transition-transform"
+      >
+        <ShoppingBag className="w-7 h-7" />
+        {cart.length > 0 && (
+          <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs font-black rounded-full flex items-center justify-center shadow-lg">
+            {cart.length}
+          </span>
+        )}
+      </button>
+
+      {/* Mobile Cart Backdrop */}
+      {showMobileCart && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowMobileCart(false)}
+        />
+      )}
+
       {/* Lado Derecho: Carrito de Compras (Fixed Sticky Panel) */}
-      <div className="w-full md:w-96 flex flex-col h-full bg-white border-l border-slate-200 flex-shrink-0 animate-in slide-in-from-right-4 duration-300 shadow-xl z-20">
+      <div className={`fixed inset-y-0 right-0 z-50 w-full sm:w-96 flex flex-col h-full bg-white border-l border-slate-200 flex-shrink-0 shadow-xl transition-transform duration-300 md:static md:w-96 md:translate-x-0 md:z-20 ${showMobileCart ? 'translate-x-0' : 'translate-x-full'}`}>
          <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-2">
+            {/* Close button (mobile only) */}
+            <button
+              onClick={() => setShowMobileCart(false)}
+              className="md:hidden p-1.5 -ml-2 mr-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
             <ShoppingBag className="w-5 h-5 text-blue-600 font-bold" />
             <h3 className="font-bold text-base text-slate-800 tracking-tight">Orden Actual</h3>
             <span className="text-xs bg-slate-100 font-bold text-slate-600 px-2 py-0.5 rounded-full ml-auto">
@@ -338,7 +368,7 @@ export const POS: React.FC = () => {
                            <button onClick={() => handleUpdateQuantity(i.productoId, i.cantidad + 1)} className="p-1 border bg-white border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"><Plus className="w-3.5 h-3.5" /></button>
                         </div>
                      </div>
-                     <button onClick={() => handleRemoveItem(i.productoId)} className="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"><Trash2 className="w-4 h-4" /></button>
+                     <button onClick={() => handleRemoveItem(i.productoId)} className="text-slate-400 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity p-1"><Trash2 className="w-4 h-4" /></button>
                   </div>
                ))
             )}
@@ -364,7 +394,7 @@ export const POS: React.FC = () => {
             </div>
 
             <button 
-              onClick={() => setIsDrawerOpen(true)}
+              onClick={() => { setIsDrawerOpen(true); setShowMobileCart(false); }}
               disabled={cart.length === 0}
               className="w-full py-4 text-base font-bold text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 active:translate-y-0.5"
             >
@@ -376,7 +406,7 @@ export const POS: React.FC = () => {
       {/* Drawer Cierre Venta UX */}
       {isDrawerOpen && (
          <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 flex justify-end">
-            <div className="bg-white h-full w-full max-w-sm md:max-w-md p-8 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 relative">
+            <div className="bg-white h-full w-full max-w-full sm:max-w-md p-6 sm:p-8 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 relative overflow-y-auto">
                
                <button onClick={() => setIsDrawerOpen(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all">
                   <X className="w-6 h-6" />
@@ -453,7 +483,7 @@ export const POS: React.FC = () => {
       {/* Modal Éxito Venta */}
       {successVentaId && (
          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="bg-white rounded-3xl w-full max-w-sm p-6 text-center animate-in zoom-in-95 duration-200 shadow-2xl relative">
+            <div className="bg-white rounded-3xl w-full max-w-sm mx-4 sm:mx-0 p-6 text-center animate-in zoom-in-95 duration-200 shadow-2xl relative">
                <div className="w-16 h-16 mx-auto bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
                   <CheckCircle className="w-8 h-8" />
                </div>

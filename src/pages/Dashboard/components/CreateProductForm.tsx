@@ -171,7 +171,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
   };
 
   return (
-    <div className="w-full p-6 mb-8 bg-white border border-gray-100 rounded-xl shadow-sm transition-all duration-300 hover:shadow-md">
+    <div className="w-full p-4 sm:p-6 mb-8 bg-white border border-gray-100 rounded-xl shadow-sm transition-all duration-300 hover:shadow-md">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-slate-800">{initialData ? 'Editar Producto' : 'Crear Nuevo Producto'}</h2>
         {initialData && (

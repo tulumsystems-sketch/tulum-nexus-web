@@ -220,8 +220,8 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
   return (
     <>
       <div className="w-full relative block overflow-hidden bg-white border border-slate-100 rounded-2xl shadow-sm mb-8 p-4 sm:p-8 min-h-0">
-      <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-100">
-        <h2 className="text-2xl font-bold text-slate-800">Nueva Orden de Venta</h2>
+      <div className="flex items-center justify-between mb-6 sm:mb-8 pb-4 border-b border-slate-100 gap-3 flex-wrap">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Nueva Orden de Venta</h2>
         <div className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-wider rounded-full border border-indigo-100">
           SaaS Professional POS
         </div>
@@ -236,7 +236,7 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
         
         {/* 1. Encabezado (Cliente) */}
-        <div className="grid grid-cols-1 gap-6 p-6 bg-slate-50/50 rounded-xl border border-slate-100">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 p-4 sm:p-6 bg-slate-50/50 rounded-xl border border-slate-100">
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-slate-700">Cliente (Consumidor Final por defecto)</label>
             <div className="flex gap-2">
@@ -269,10 +269,10 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
         </div>
 
         {/* 2. El Carrito (Productos) */}
-        <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
+        <div className="p-4 sm:p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
           <label className="block mb-3 text-sm font-bold text-slate-800 uppercase tracking-wide">Productos / Servicios</label>
           
-          <div className="flex flex-col md:flex-row gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+          <div className="flex flex-col gap-4 mb-6 p-3 sm:p-4 bg-slate-50 rounded-xl border border-slate-100">
             {/* Buscador por Nombre */}
             <div className="flex-1">
               <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Buscar por Nombre</label>
@@ -333,7 +333,7 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
           </div>
 
           {items.length > 0 ? (
-            <div className="overflow-hidden border border-slate-200 rounded-xl">
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
               <table className="min-w-full text-sm text-left text-slate-600">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
                   <tr>
@@ -385,7 +385,7 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
         </div>
 
         {/* 3. Resumen y Observaciones */}
-        <div className="p-6 bg-slate-50/30 rounded-xl border border-dashed border-slate-200">
+        <div className="p-4 sm:p-6 bg-slate-50/30 rounded-xl border border-dashed border-slate-200">
           <label className="block mb-2 text-sm font-semibold text-slate-700">Observaciones Internas</label>
           <textarea
             {...register('observaciones')}

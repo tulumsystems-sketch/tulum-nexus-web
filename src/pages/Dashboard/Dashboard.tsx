@@ -32,6 +32,7 @@ export const Dashboard: React.FC = () => {
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const [montoCierre, setMontoCierre] = useState<number | ''>('');
   const [isClosingCaja, setIsClosingCaja] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // SWR Asíncrono puro - Solo disparar si hay token para evitar loops de 401/403
   const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token ? '/categorias' : null, fetcher);
@@ -40,7 +41,7 @@ export const Dashboard: React.FC = () => {
   const { data: ventas, error: errorVentas, isLoading: isLoadingVentas, mutate: mutateVentas } = useSWR(token ? '/ventas' : null, fetcher);
   
   // Configuración Global y Preferencias
-  const { data: globalConfig } = useSWR(token ? '/config' : null, fetcher);
+  const { data: globalConfig } = useSWR(token && esAdmin ? '/config' : null, fetcher);
   
   // Filtros Pestaña de Ventas
   const [filterDesde, setFilterDesde] = useState('');
@@ -55,7 +56,7 @@ export const Dashboard: React.FC = () => {
   );
 
   // Estado de la Caja
-  const { data: cajaEstado, mutate: mutateCajaEstado, isLoading: isLoadingCaja } = useSWR(token ? '/caja/estado' : null, fetcher);
+  const { data: cajaEstado, mutate: mutateCajaEstado, isLoading: isLoadingCaja } = useSWR(token && esAdmin ? '/caja/estado' : null, fetcher);
 
   // Verificación de seguridad ANTES de cualquier renderizado pero DESPUÉS de todos los Hooks
   if (!token) {
@@ -291,13 +292,24 @@ export const Dashboard: React.FC = () => {
   const vendidoMP = Array.isArray(ventas) ? ventas.filter((v: any) => v.metodoPago !== 'EFECTIVO' && v.estado !== 'ANULADA').reduce((acc, v) => acc + (v.totalFinal || 0), 0) : 0;
   const totalEsperadoCaja = (cajaEstado?.montoInicial || 0) + vendidoEfectivo;
 
-  console.log('Dashboard terminando cálculos y renderizando UI general...');
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    setSidebarOpen(false);
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-800 selection:bg-blue-100 selection:text-blue-900">
       
+      {/* Mobile Sidebar Backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar Lateral Premium */}
-      <aside className="w-72 flex-shrink-0 bg-[#0f172a] text-white flex flex-col transition-all duration-300 shadow-2xl relative z-20">
+      <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-[#0f172a] text-white flex flex-col transition-transform duration-300 shadow-2xl lg:static lg:translate-x-0 lg:z-20 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
         {/* Branding */}
         <div className="p-6 border-b border-white/5 flex items-center gap-3">
@@ -329,7 +341,7 @@ export const Dashboard: React.FC = () => {
         {/* Navbar */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           <button
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => handleTabChange('dashboard')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
               activeTab === 'dashboard'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -342,7 +354,7 @@ export const Dashboard: React.FC = () => {
 
           {/* Acceso Directo Punto de Venta POS */}
           <button
-            onClick={() => navigate('/pos')}
+            onClick={() => { setSidebarOpen(false); navigate('/pos'); }}
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-black bg-emerald-600 text-white shadow-lg shadow-emerald-500/10 hover:bg-emerald-700 transition-all duration-200 hover:-translate-y-0.5"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
@@ -351,7 +363,7 @@ export const Dashboard: React.FC = () => {
 
           <button
 
-            onClick={() => setActiveTab('products')}
+            onClick={() => handleTabChange('products')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
               activeTab === 'products'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -363,7 +375,7 @@ export const Dashboard: React.FC = () => {
           </button>
           
           <button
-            onClick={() => setActiveTab('categories')}
+            onClick={() => handleTabChange('categories')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
               activeTab === 'categories'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -375,7 +387,7 @@ export const Dashboard: React.FC = () => {
           </button>
           
           <button
-            onClick={() => setActiveTab('clients')}
+            onClick={() => handleTabChange('clients')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
               activeTab === 'clients'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -388,7 +400,7 @@ export const Dashboard: React.FC = () => {
 
           {esAdmin && (
             <button
-              onClick={() => setActiveTab('usuarios')}
+              onClick={() => handleTabChange('usuarios')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                 activeTab === 'usuarios'
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -404,7 +416,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           <button
-            onClick={() => setActiveTab('sales')}
+            onClick={() => handleTabChange('sales')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
               activeTab === 'sales'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -416,7 +428,7 @@ export const Dashboard: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab('remitos')}
+            onClick={() => handleTabChange('remitos')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
               activeTab === 'remitos'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -430,7 +442,7 @@ export const Dashboard: React.FC = () => {
           {esAdmin && (
             <div className="pt-2 border-t border-white/5">
               <button
-                onClick={() => setActiveTab('settings')}
+                onClick={() => handleTabChange('settings')}
                 className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                   activeTab === 'settings'
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
@@ -469,13 +481,22 @@ export const Dashboard: React.FC = () => {
       <main className="flex-1 flex flex-col min-w-0 h-screen relative z-10 bg-slate-50">
         
         {/* Topbar Header */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-10 py-6 flex items-center justify-between sticky top-0 z-10">
-           <div>
-             <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{tabTitles[activeTab]}</h2>
-             <p className="text-sm font-medium text-slate-500 mt-1">Gestión administrativa y recursos del tenant.</p>
+        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 py-4 lg:px-10 lg:py-6 flex items-center justify-between sticky top-0 z-10 gap-3">
+           {/* Hamburger (mobile only) */}
+           <button
+             onClick={() => setSidebarOpen(true)}
+             className="lg:hidden p-2 -ml-1 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
+             aria-label="Abrir menú"
+           >
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+           </button>
+
+           <div className="min-w-0 flex-1">
+             <h2 className="text-lg lg:text-2xl font-extrabold text-slate-800 tracking-tight truncate">{tabTitles[activeTab]}</h2>
+             <p className="text-xs lg:text-sm font-medium text-slate-500 mt-0.5 hidden sm:block">Gestión administrativa y recursos del tenant.</p>
            </div>
            
-           <div className="hidden md:flex items-center gap-4 text-sm font-semibold text-slate-500 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-inner">
+           <div className="hidden md:flex items-center gap-4 text-sm font-semibold text-slate-500 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-inner flex-shrink-0">
              <div className="flex items-center gap-2">
                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
                API Conectada
@@ -484,7 +505,7 @@ export const Dashboard: React.FC = () => {
         </header>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-10 min-h-0">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-10 min-h-0">
           
           {/* TAB: PRODUCTOS */}
           {activeTab === 'products' && (
@@ -806,16 +827,16 @@ export const Dashboard: React.FC = () => {
             <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                
                {/* Barra de Filtros */}
-               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-end">
-                 <div className="flex-1 min-w-[150px]">
+               <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-3 sm:gap-4 items-end">
+                 <div className="flex-1 min-w-[120px] sm:min-w-[150px]">
                     <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Desde</label>
-                    <input type="date" value={filterDesde} onChange={(e) => { setFilterDesde(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50" />
+                    <input type="date" value={filterDesde} onChange={(e) => { setFilterDesde(e.target.value); setPage(0); }} className="w-full px-3 sm:px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50" />
                  </div>
-                 <div className="flex-1 min-w-[150px]">
+                 <div className="flex-1 min-w-[120px] sm:min-w-[150px]">
                     <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Hasta</label>
-                    <input type="date" value={filterHasta} onChange={(e) => { setFilterHasta(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50" />
+                    <input type="date" value={filterHasta} onChange={(e) => { setFilterHasta(e.target.value); setPage(0); }} className="w-full px-3 sm:px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50" />
                  </div>
-                 <div className="flex-1 min-w-[150px]">
+                 <div className="flex-1 min-w-[120px] sm:min-w-[150px]">
                     <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Medio de Pago</label>
                     <select value={filterMetodoPago} onChange={(e) => { setFilterMetodoPago(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50">
                        <option value="">TODOS</option>
@@ -823,7 +844,7 @@ export const Dashboard: React.FC = () => {
                        <option value="MERCADO_PAGO">MERCADO PAGO</option>
                     </select>
                  </div>
-                 <div className="flex-1 min-w-[150px]">
+                 <div className="flex-1 min-w-[120px] sm:min-w-[150px]">
                     <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Estado</label>
                     <select value={filterEstado} onChange={(e) => { setFilterEstado(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50">
                        <option value="">TODOS</option>
@@ -879,7 +900,7 @@ export const Dashboard: React.FC = () => {
                  </div>
                  
                  {/* Footer Paginacion */}
-                 <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-between items-center text-sm font-bold text-slate-600">
+                 <div className="bg-slate-50 px-4 py-3 sm:px-6 sm:py-4 border-t border-slate-200 flex justify-between items-center text-sm font-bold text-slate-600">
                    <div>Página {page + 1} de {ventasPaginadas?.totalPages || 1}</div>
                    <div className="flex gap-2">
                      <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg disabled:opacity-50 font-black text-xs hover:bg-slate-100 hover:text-slate-800 transition-all shadow-sm">Anterior</button>

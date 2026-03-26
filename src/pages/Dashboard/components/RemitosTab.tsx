@@ -112,13 +112,13 @@ export const RemitosTab: React.FC = () => {
 
       {/* SECCIÓN 1: FORMULARIO DE CREACIÓN */}
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="bg-slate-50 px-8 py-5 border-b border-slate-200">
+        <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-b border-slate-200">
           <h3 className="text-xl font-bold text-slate-800">Generar Nuevo Remito</h3>
           <p className="text-sm text-slate-500 mt-1">Completa los datos de envío y carga los productos de la hoja de ruta.</p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-8 space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="lg:col-span-1">
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Cliente</label>
               <select

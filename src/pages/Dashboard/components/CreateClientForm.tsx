@@ -66,7 +66,7 @@ export const CreateClientForm: React.FC<CreateClientProps> = ({ onClientCreated 
   };
 
   return (
-    <div className="w-full p-6 mb-8 bg-white rounded-lg shadow-sm">
+    <div className="w-full p-4 sm:p-6 mb-8 bg-white rounded-lg shadow-sm">
       <h2 className="mb-4 text-xl font-semibold text-gray-700">Crear Nuevo Cliente</h2>
 
       {apiError && (
