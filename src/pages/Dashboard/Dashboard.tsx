@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import apiClient from '../../api/axiosConfig';
@@ -24,6 +24,7 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const rol = localStorage.getItem('rol');
   const esAdmin = rol === 'ADMIN';
+  const isOperador = rol === 'OPERADOR';
 
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [editingProduct, setEditingProduct] = useState<any>(null);
@@ -56,7 +57,22 @@ export const Dashboard: React.FC = () => {
   );
 
   // Estado de la Caja
-  const { data: cajaEstado, mutate: mutateCajaEstado, isLoading: isLoadingCaja } = useSWR(token && esAdmin ? '/caja/estado' : null, fetcher);
+  const [caja, setCaja] = useState<any>(null);
+  const [isLoadingCaja, setIsLoadingCaja] = useState(true);
+
+  useEffect(() => {
+    if (token) {
+      apiClient.get('/caja/estado')
+        .then(res => setCaja(res.data))
+        .catch(err => {
+          console.error("Error obteniendo estado de caja:", err);
+          setCaja(null);
+        })
+        .finally(() => setIsLoadingCaja(false));
+    } else {
+      setIsLoadingCaja(false);
+    }
+  }, [token]);
 
   // Verificación de seguridad ANTES de cualquier renderizado pero DESPUÉS de todos los Hooks
   if (!token) {
@@ -65,6 +81,9 @@ export const Dashboard: React.FC = () => {
 
   const handleLogout = (): void => {
     localStorage.removeItem('token');
+    localStorage.removeItem('tenant');
+    localStorage.removeItem('rol');
+    localStorage.removeItem('email');
     navigate('/login', { replace: true });
   };
 
@@ -211,10 +230,22 @@ export const Dashboard: React.FC = () => {
   const handleOpenCaja = async (e: React.FormEvent) => {
     e.preventDefault();
     if (montoInicial === '' || Number(montoInicial) < 0) return;
+    
     setIsOpeningCaja(true);
+    const payload = { montoInicial: Number(montoInicial) };
+    
+    console.log('--- ENVIANDO APERTURA DE CAJA ---');
+    console.log('Payload:', payload);
+    console.log('URL: /api/caja/apertura');
+
     try {
-      await apiClient.post('/caja/apertura', { montoInicial: Number(montoInicial) });
-      await mutateCajaEstado();
+      await apiClient.post('/caja/apertura', payload);
+      
+      // Obtener el nuevo estado inmediatamente para actualizar la UI sin delay
+      const stateRes = await apiClient.get('/caja/estado');
+      setCaja(stateRes.data);
+      
+      alert('✅ Caja abierta correctamente. Ya puede comenzar a operar.');
     } catch (error: any) {
       console.error('Error al abrir caja:', error);
       alert('Error al abrir la caja. ' + (error.response?.data?.message || ''));
@@ -229,13 +260,31 @@ export const Dashboard: React.FC = () => {
     setIsClosingCaja(true);
     try {
       await apiClient.post('/caja/cierre', { montoFinalReal: Number(montoCierre) });
-      await mutateCajaEstado();
+      const stateRes = await apiClient.get('/caja/estado');
+      setCaja(stateRes.data);
       setIsClosingModalOpen(false);
       setMontoCierre('');
       setActiveTab('dashboard');
 
     } catch (error: any) {
       console.error('Error al cerrar caja:', error);
+      alert('Error al cerrar la caja. ' + (error.response?.data?.message || ''));
+    } finally {
+      setIsClosingCaja(false);
+    }
+  };
+
+  const handleCloseCajaQuick = async () => {
+    if (!window.confirm('¿Estás seguro de que deseas cerrar la caja con monto en cero?')) return;
+    
+    setIsClosingCaja(true);
+    try {
+      await apiClient.post('/caja/cierre', { montoFinalReal: 0 });
+      const stateRes = await apiClient.get('/caja/estado');
+      setCaja(stateRes.data);
+      alert('✅ Caja cerrada correctamente.');
+    } catch (error: any) {
+      console.error('Error al cerrar caja (quick):', error);
       alert('Error al cerrar la caja. ' + (error.response?.data?.message || ''));
     } finally {
       setIsClosingCaja(false);
@@ -290,7 +339,7 @@ export const Dashboard: React.FC = () => {
 
   const vendidoEfectivo = Array.isArray(ventas) ? ventas.filter((v: any) => v.metodoPago === 'EFECTIVO' && v.estado !== 'ANULADA').reduce((acc, v) => acc + (v.totalFinal || 0), 0) : 0;
   const vendidoMP = Array.isArray(ventas) ? ventas.filter((v: any) => v.metodoPago !== 'EFECTIVO' && v.estado !== 'ANULADA').reduce((acc, v) => acc + (v.totalFinal || 0), 0) : 0;
-  const totalEsperadoCaja = (cajaEstado?.montoInicial || 0) + vendidoEfectivo;
+  const totalEsperadoCaja = (caja?.montoInicial || 0) + vendidoEfectivo;
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -458,13 +507,14 @@ export const Dashboard: React.FC = () => {
 
 
         <div className="p-6 border-t border-white/5 space-y-3">
-          {cajaEstado && esAdmin && (
+          {caja && caja.estado === 'ABIERTA' && (
             <button
-              onClick={() => setIsClosingModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-amber-500 transition-colors bg-amber-500/10 rounded-xl hover:bg-amber-500 hover:text-white"
+              onClick={handleCloseCajaQuick}
+              disabled={isClosingCaja}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-amber-500 transition-colors bg-amber-500/10 rounded-xl hover:bg-amber-500 hover:text-white disabled:opacity-50"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-              Cerrar Turno
+              Cerrar Caja
             </button>
           )}
           <button
@@ -921,7 +971,7 @@ export const Dashboard: React.FC = () => {
       </main>
 
       {/* Modal de Bloqueo de Caja */}
-      {!isLoadingCaja && !cajaEstado && !esAdmin && (
+      {!isLoadingCaja && isOperador && (!caja || caja.estado !== 'ABIERTA') && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
           <div className="w-full max-w-sm p-8 bg-white shadow-2xl rounded-2xl animate-in zoom-in-95 duration-300">
             <div className="flex justify-center mb-6">
@@ -968,6 +1018,14 @@ export const Dashboard: React.FC = () => {
                   </>
                 )}
               </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 mt-2 font-bold text-slate-400 hover:text-red-500 transition-colors text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Salir / Cerrar Sesión
+              </button>
             </form>
           </div>
         </div>
@@ -982,7 +1040,7 @@ export const Dashboard: React.FC = () => {
             <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-bold text-slate-500">Efectivo Inicial:</span>
-                <span className="font-mono font-bold text-slate-700">${(cajaEstado?.montoInicial || 0).toFixed(2)}</span>
+                <span className="font-mono font-bold text-slate-700">${(caja?.montoInicial || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between items-center text-emerald-600">
                 <span className="text-sm font-bold opacity-80">Vendido en Efectivo:</span>
