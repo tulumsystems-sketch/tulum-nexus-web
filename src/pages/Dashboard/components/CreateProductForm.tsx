@@ -80,8 +80,8 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         precio: initialData.precio,
         cantidadStock: initialData.cantidadStock,
         medidas: initialData.medidas,
-        categoriaId: initialData.categoriaId,
-        stockMinimo: initialData.stockMinimo,
+        categoriaId: initialData.categoria?.id ?? initialData.categoriaId,
+        stockMinimo: initialData.stockMinimo ?? 0,
       });
       setPreviewUrl(initialData.imageUrl || null);
     } else {

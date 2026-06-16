@@ -26,14 +26,18 @@ export const Dashboard: React.FC = () => {
   const esAdmin = rol === 'ADMIN';
   const isOperador = rol === 'OPERADOR';
 
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [activeTab, setActiveTab] = useState<TabType>(isOperador ? 'products' : 'dashboard');
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [montoInicial, setMontoInicial] = useState<number | ''>('');
   const [isOpeningCaja, setIsOpeningCaja] = useState(false);
+  const [isAperturaModalOpen, setIsAperturaModalOpen] = useState(false);
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
+  const [isHistorialCajasOpen, setIsHistorialCajasOpen] = useState(false);
   const [montoCierre, setMontoCierre] = useState<number | ''>('');
   const [isClosingCaja, setIsClosingCaja] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
 
   // SWR Asíncrono puro - Solo disparar si hay token para evitar loops de 401/403
   const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token ? '/categorias' : null, fetcher);
@@ -42,7 +46,8 @@ export const Dashboard: React.FC = () => {
   const { data: ventas, error: errorVentas, isLoading: isLoadingVentas, mutate: mutateVentas } = useSWR(token ? '/ventas' : null, fetcher);
   
   // Configuración Global y Preferencias
-  const { data: globalConfig } = useSWR(token && esAdmin ? '/config' : null, fetcher);
+  const { data: globalConfig } = useSWR(token ? '/config' : null, fetcher);
+  const mpHabilitado = globalConfig?.mpAceptarCredito || globalConfig?.mpAceptarDebito;
   
   // Filtros Pestaña de Ventas
   const [filterDesde, setFilterDesde] = useState('');
@@ -73,6 +78,12 @@ export const Dashboard: React.FC = () => {
       setIsLoadingCaja(false);
     }
   }, [token]);
+
+  // Historial de Cierres de Caja (solo carga cuando el modal está abierto)
+  const { data: historialCajas } = useSWR(
+    isHistorialCajasOpen ? '/caja/historial' : null,
+    fetcher
+  );
 
   // Verificación de seguridad ANTES de cualquier renderizado pero DESPUÉS de todos los Hooks
   if (!token) {
@@ -245,6 +256,7 @@ export const Dashboard: React.FC = () => {
       const stateRes = await apiClient.get('/caja/estado');
       setCaja(stateRes.data);
       
+      setIsAperturaModalOpen(false);
       alert('✅ Caja abierta correctamente. Ya puede comenzar a operar.');
     } catch (error: any) {
       console.error('Error al abrir caja:', error);
@@ -341,6 +353,10 @@ export const Dashboard: React.FC = () => {
   const vendidoMP = Array.isArray(ventas) ? ventas.filter((v: any) => v.metodoPago !== 'EFECTIVO' && v.estado !== 'ANULADA').reduce((acc, v) => acc + (v.totalFinal || 0), 0) : 0;
   const totalEsperadoCaja = (caja?.montoInicial || 0) + vendidoEfectivo;
 
+  const filteredProducts = Array.isArray(productos) ? productos.filter((p: any) =>
+    (p.nombre || '').toLowerCase().includes(productSearch.toLowerCase())
+  ) : [];
+
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     setSidebarOpen(false);
@@ -383,12 +399,13 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="font-semibold text-slate-200 truncate flex items-center gap-2">
             <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            Administrador Master
+            {esAdmin ? 'Administrador' : 'Operador'}
           </div>
         </div>
 
         {/* Navbar */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {!isOperador && (
           <button
             onClick={() => handleTabChange('dashboard')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -400,6 +417,7 @@ export const Dashboard: React.FC = () => {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
             Dashboard
           </button>
+          )}
 
           {/* Acceso Directo Punto de Venta POS */}
           <button
@@ -435,17 +453,19 @@ export const Dashboard: React.FC = () => {
             Categorías
           </button>
           
-          <button
-            onClick={() => handleTabChange('clients')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              activeTab === 'clients'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-            Directorio Clientes
-          </button>
+          {(globalConfig?.clientesHabilitado ?? true) && (
+            <button
+              onClick={() => handleTabChange('clients')}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                activeTab === 'clients'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+              Directorio Clientes
+            </button>
+          )}
 
           {esAdmin && (
             <button
@@ -464,6 +484,7 @@ export const Dashboard: React.FC = () => {
             </button>
           )}
 
+          {!isOperador && (
           <button
             onClick={() => handleTabChange('sales')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -475,18 +496,21 @@ export const Dashboard: React.FC = () => {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"></path></svg>
             Ventas / POS
           </button>
+          )}
 
-          <button
-            onClick={() => handleTabChange('remitos')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              activeTab === 'remitos'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"></path></svg>
-            Hojas de Ruta
-          </button>
+          {(globalConfig?.remitosHabilitado ?? true) && (
+            <button
+              onClick={() => handleTabChange('remitos')}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                activeTab === 'remitos'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"></path></svg>
+              Hojas de Ruta
+            </button>
+          )}
 
           {esAdmin && (
             <div className="pt-2 border-t border-white/5">
@@ -507,14 +531,30 @@ export const Dashboard: React.FC = () => {
 
 
         <div className="p-6 border-t border-white/5 space-y-3">
-          {caja && caja.estado === 'ABIERTA' && (
+          {caja && caja.estado === 'ABIERTA' ? (
             <button
-              onClick={handleCloseCajaQuick}
-              disabled={isClosingCaja}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-amber-500 transition-colors bg-amber-500/10 rounded-xl hover:bg-amber-500 hover:text-white disabled:opacity-50"
+              onClick={() => setIsClosingModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-amber-500 transition-colors bg-amber-500/10 rounded-xl hover:bg-amber-500 hover:text-white"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
               Cerrar Caja
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsAperturaModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-emerald-500 transition-colors bg-emerald-500/10 rounded-xl hover:bg-emerald-500 hover:text-white"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+              Abrir Turno
+            </button>
+          )}
+          {esAdmin && (
+            <button
+              onClick={() => setIsHistorialCajasOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-slate-400 transition-colors bg-white/5 rounded-xl hover:bg-slate-100 hover:text-slate-700"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+              Historial de Cierres
             </button>
           )}
           <button
@@ -546,12 +586,7 @@ export const Dashboard: React.FC = () => {
              <p className="text-xs lg:text-sm font-medium text-slate-500 mt-0.5 hidden sm:block">Gestión administrativa y recursos del tenant.</p>
            </div>
            
-           <div className="hidden md:flex items-center gap-4 text-sm font-semibold text-slate-500 bg-slate-100 px-4 py-2 rounded-full border border-slate-200 shadow-inner flex-shrink-0">
-             <div className="flex items-center gap-2">
-               <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-               API Conectada
-             </div>
-           </div>
+
         </header>
 
         {/* Scrollable Content */}
@@ -559,77 +594,115 @@ export const Dashboard: React.FC = () => {
           
           {/* TAB: PRODUCTOS */}
           {activeTab === 'products' && (
-            <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <CreateProductForm 
-                onProductCreated={() => { handleProductCreated(); setEditingProduct(null); }} 
-                initialData={editingProduct}
-                onCancelEdit={() => setEditingProduct(null)}
-              />
+            <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {showProductForm || editingProduct ? (
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowProductForm(false); setEditingProduct(null); }}
+                    className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors mb-4"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    Volver a Productos
+                  </button>
+                  <CreateProductForm 
+                    onProductCreated={() => { handleProductCreated(); setEditingProduct(null); setShowProductForm(false); }} 
+                    initialData={editingProduct}
+                    onCancelEdit={() => { setEditingProduct(null); setShowProductForm(false); }}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="relative flex-1 max-w-md">
+                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                      <input
+                        type="text"
+                        placeholder="Buscar productos..."
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm font-medium text-slate-700 transition-all"
+                      />
+                    </div>
+                    <button
+                      onClick={() => setShowProductForm(true)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-200 transition-all"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
+                      Agregar Producto
+                    </button>
+                  </div>
 
-              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                  <h3 className="text-lg font-bold text-slate-800">Catálogo de Productos</h3>
-                  <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">{Array.isArray(productos) ? productos.length : 0} Ítems</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-sm text-slate-600">
-                    <thead className="bg-white border-b border-slate-100 text-xs uppercase tracking-wider text-slate-400 font-bold">
-                      <tr>
-                        <th className="px-6 py-4">Imagen</th>
-                        <th className="px-6 py-4">Producto</th>
-                        <th className="px-6 py-4">Categoría</th>
-                        <th className="px-6 py-4 text-right">Precio Base</th>
-                        <th className="px-6 py-4 text-center">Stock</th>
-                        <th className="px-6 py-4 text-center">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {Array.isArray(productos) && productos.length > 0 ? productos.map((col: any, index: number) => (
-                         <tr key={col.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                           <td className="px-6 py-3">
-                              {col.imageUrl ? (
-                                <img src={col.imageUrl} alt={col.nombre} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shadow-sm" />
-                              ) : (
-                                <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400 text-xs">Sin IMG</div>
-                              )}
-                           </td>
-                           <td className="px-6 py-4 font-bold text-slate-800">{col.nombre}</td>
-                           <td className="px-6 py-4 font-medium text-slate-500">{col.categoria?.nombre || `ID: ${col.categoriaId}`}</td>
-                           <td className="px-6 py-4 font-bold text-slate-800 text-right">${Number(col.precio).toFixed(2)}</td>
-                           <td className="px-6 py-4 text-center">
-                             <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${col.cantidadStock > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                               {col.cantidadStock} Unds.
-                             </span>
-                           </td>
-                           <td className="px-6 py-4 text-center">
-                             <div className="flex items-center justify-center gap-2">
-                               <button
-                                 onClick={() => {
-                                   setEditingProduct(col);
-                                   window.scrollTo({ top: 0, behavior: 'smooth' });
-                                 }}
-                                 className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
-                                 title="Editar Producto"
-                               >
-                                 <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                               </button>
-                               <button
-                                 onClick={() => handleDeleteProduct(col.id)}
-                                 className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                                 title="Eliminar Producto"
-                               >
-                                 <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                               </button>
-                             </div>
-                           </td>
-                         </tr>
-                      )) : (
-                        <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-400 italic">No hay productos registrados.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                  <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                      <h3 className="text-lg font-bold text-slate-800">Catálogo de Productos</h3>
+                      <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">{filteredProducts.length} Ítems</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-left text-sm text-slate-600">
+                        <thead className="bg-white border-b border-slate-100 text-xs uppercase tracking-wider text-slate-400 font-bold">
+                          <tr>
+                            <th className="px-6 py-4">Imagen</th>
+                            <th className="px-6 py-4">Producto</th>
+                            <th className="px-6 py-4">Categoría</th>
+                            <th className="px-6 py-4 text-right">Precio Base</th>
+                            <th className="px-6 py-4 text-center">Stock</th>
+                            <th className="px-6 py-4 text-center">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredProducts.length > 0 ? filteredProducts.map((col: any, index: number) => (
+                             <tr key={col.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                               <td className="px-6 py-3">
+                                  {col.imageUrl ? (
+                                    <img src={col.imageUrl} alt={col.nombre} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shadow-sm" />
+                                  ) : (
+                                    <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400 text-xs">Sin IMG</div>
+                                  )}
+                               </td>
+                               <td className="px-6 py-4 font-bold text-slate-800">{col.nombre}</td>
+                               <td className="px-6 py-4 font-medium text-slate-500">{col.categoria?.nombre || `ID: ${col.categoriaId}`}</td>
+                               <td className="px-6 py-4 font-bold text-slate-800 text-right">${Number(col.precio).toFixed(2)}</td>
+                                <td className="px-6 py-4 text-center">
+                                  <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${
+                                    col.cantidadStock <= 0 ? 'bg-red-50 text-red-700 border-red-200' :
+                                    col.stockMinimo > 0 && col.cantidadStock <= col.stockMinimo ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                    'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  }`}>
+                                    {col.cantidadStock} Unds.
+                                  </span>
+                                </td>
+                               <td className="px-6 py-4 text-center">
+                                 <div className="flex items-center justify-center gap-2">
+                                   <button
+                                     onClick={() => {
+                                       setEditingProduct(col);
+                                       setShowProductForm(true);
+                                       window.scrollTo({ top: 0, behavior: 'smooth' });
+                                     }}
+                                     className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                                     title="Editar Producto"
+                                   >
+                                     <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                   </button>
+                                   <button
+                                     onClick={() => handleDeleteProduct(col.id)}
+                                     className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                     title="Eliminar Producto"
+                                   >
+                                     <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                   </button>
+                                 </div>
+                               </td>
+                             </tr>
+                          )) : (
+                            <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-400 italic">No hay productos registrados.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </>
+              )}
             </div>
           )}
 
@@ -759,7 +832,46 @@ export const Dashboard: React.FC = () => {
               {/* Gráfico de Ventas Historial Recharts */}
               <VentasChart />
 
-              {/* Alertas de Stock Mínimo */}
+                {esAdmin && (!caja || caja.estado !== 'ABIERTA') && (
+                  <section className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 shadow-sm">
+                    <form onSubmit={handleOpenCaja} className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-amber-800">Turno Cerrado</h3>
+                          <p className="text-sm text-amber-700">No hay un turno de caja abierto. Iniciá uno para registrar ventas en efectivo.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            required
+                            value={montoInicial}
+                            onChange={(e) => setMontoInicial(e.target.value === '' ? '' : Number(e.target.value))}
+                            disabled={isOpeningCaja}
+                            className="w-28 pl-7 pr-3 py-2.5 bg-white border-2 border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm font-bold text-slate-800"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={isOpeningCaja}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-amber-200 transition-all disabled:opacity-50"
+                        >
+                          {isOpeningCaja ? 'Abriendo...' : 'Abrir Turno'}
+                        </button>
+                      </div>
+                    </form>
+                  </section>
+                )}
+
+                {/* Alertas de Stock Mínimo */}
               <AlertasStock />
 
               {/* Monitor de Pedidos Online WhatsApp */}
@@ -819,7 +931,7 @@ export const Dashboard: React.FC = () => {
                                 <div className="flex items-center justify-center gap-2">
                                   {!isAnulada && (
                                     <>
-                                      {estado === 'PENDIENTE' && (
+                                      {estado === 'PENDIENTE' && mpHabilitado && (
                                         <button
                                           onClick={() => handleCobrar(col.id)}
                                           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-blue-700 transition-all shadow-sm"
@@ -970,7 +1082,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </main>
 
-      {/* Modal de Bloqueo de Caja */}
+      {/* Modal de Bloqueo de Caja - Solo operador necesita turno abierto */}
       {!isLoadingCaja && isOperador && (!caja || caja.estado !== 'ABIERTA') && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
           <div className="w-full max-w-sm p-8 bg-white shadow-2xl rounded-2xl animate-in zoom-in-95 duration-300">
@@ -1096,6 +1208,116 @@ export const Dashboard: React.FC = () => {
                   {isClosingCaja ? 'Cerrando...' : 'Confirmar Cierre'}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Historial de Cierres de Caja */}
+      {isHistorialCajasOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-2xl max-h-[85vh] bg-white shadow-2xl rounded-2xl animate-in zoom-in-95 duration-300 flex flex-col">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-lg font-black text-slate-800 tracking-tight">Historial de Cierres</h2>
+              <button onClick={() => setIsHistorialCajasOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {!Array.isArray(historialCajas) || historialCajas.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                  <p className="text-sm font-bold">No hay cierres registrados</p>
+                </div>
+              ) : (
+                historialCajas.map((c: any) => (
+                  <div key={c.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className={`text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${c.estado === 'ABIERTA' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                        {c.estado}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400">
+                        {c.fechaApertura ? new Date(c.fechaApertura).toLocaleString() : '-'}
+                        {c.fechaCierre ? ` → ${new Date(c.fechaCierre).toLocaleString()}` : ''}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div><span className="font-bold text-slate-400 block">Inicial</span><span className="font-black text-slate-700">${(c.montoInicial || 0).toFixed(2)}</span></div>
+                      <div><span className="font-bold text-emerald-500 block">Efectivo</span><span className="font-black text-slate-700">${(c.montoVentasEfectivo || 0).toFixed(2)}</span></div>
+                      <div><span className="font-bold text-blue-500 block">MP</span><span className="font-black text-slate-700">${(c.montoVentasMP || 0).toFixed(2)}</span></div>
+                      <div><span className="font-bold text-amber-500 block">Esperado</span><span className="font-black text-slate-700">${(c.montoFinalEsperado || 0).toFixed(2)}</span></div>
+                      {c.montoFinalReal != null && (
+                        <div className="col-span-full border-t border-slate-200 pt-2 flex justify-between">
+                          <span className="font-bold text-slate-500">Real:</span>
+                          <span className={`font-black text-lg ${c.montoFinalReal >= (c.montoFinalEsperado || 0) ? 'text-emerald-600' : 'text-red-500'}`}>
+                            ${c.montoFinalReal.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Apertura de Caja */}
+      {isAperturaModalOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm p-8 bg-white shadow-2xl rounded-2xl animate-in zoom-in-95 duration-300">
+            <div className="flex justify-center mb-6">
+              <div className="flex items-center justify-center w-16 h-16 text-amber-600 bg-amber-100 rounded-full shadow-inner">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+              </div>
+            </div>
+            <h2 className="mb-2 text-2xl font-black text-center text-slate-800 tracking-tight">Apertura de Turno</h2>
+            <p className="mb-8 text-sm font-medium text-center text-slate-500 leading-relaxed">
+              Ingresá el monto de efectivo disponible para cambio.
+            </p>
+            <form onSubmit={handleOpenCaja} className="space-y-6">
+              <div>
+                <label className="block mb-2 text-sm font-bold text-slate-700">Monto Inicial ($)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-3.5 font-bold text-slate-400">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={montoInicial}
+                    onChange={(e) => setMontoInicial(e.target.value === '' ? '' : Number(e.target.value))}
+                    disabled={isOpeningCaja}
+                    className="w-full pl-8 pr-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 text-lg font-black text-slate-800 transition-all placeholder:font-medium"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={isOpeningCaja}
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-4 font-black tracking-wide text-white transition-all bg-emerald-600 rounded-xl shadow-lg shadow-emerald-500/30 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isOpeningCaja ? (
+                  <>
+                    <svg className="w-5 h-5 text-white animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    Abriendo Turno...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
+                    Iniciar Turno
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAperturaModalOpen(false)}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 mt-2 font-bold text-slate-400 hover:text-red-500 transition-colors text-sm"
+              >
+                Cancelar
+              </button>
             </form>
           </div>
         </div>

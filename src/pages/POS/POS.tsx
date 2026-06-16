@@ -34,20 +34,27 @@ export const POS: React.FC = () => {
   const navigate = useNavigate();
   const searchInputRef = useRef<HTMLInputElement>(null);
   
+  // SWR: Preferencias y Config
+  const { data: globalConfig } = useSWR('/config', fetcher);
+
   // Estados principales
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false); // Cambiado a Drawer
   const [showMobileCart, setShowMobileCart] = useState(false);
-  const [metodoPago, setMetodoPago] = useState<'EFECTIVO' | 'MERCADO_PAGO'>('MERCADO_PAGO');
+  const mpHabilitado = globalConfig?.mpAceptarCredito || globalConfig?.mpAceptarDebito;
+  const [metodoPago, setMetodoPago] = useState<'EFECTIVO' | 'MERCADO_PAGO'>(mpHabilitado ? 'MERCADO_PAGO' : 'EFECTIVO');
   const [montoAbonado, setMontoAbonado] = useState<number | ''>('');
+
+  useEffect(() => {
+    if (!mpHabilitado && metodoPago === 'MERCADO_PAGO') {
+      setMetodoPago('EFECTIVO');
+    }
+  }, [mpHabilitado]);
   const [apiError, setApiError] = useState<string | null>(null);
   const [successVentaId, setSuccessVentaId] = useState<string | number | null>(null);
   const [vueltoFinal, setVueltoFinal] = useState<number>(0);
   const [currentVentaPrint, setCurrentVentaPrint] = useState<any>(null); // Guardar copia de la venta para imprimir
-
-  // SWR: Preferencias y Config
-  const { data: globalConfig } = useSWR('/config', fetcher);
 
 
   // SWR: Estado de la caja
@@ -78,7 +85,21 @@ export const POS: React.FC = () => {
   const calculoIva = subtotalNeto * 0.21;
   const totalVenta = subtotalNeto + calculoIva;
 
+  const getProductStock = (productoId: number): number => {
+    const prod = Array.isArray(productos) ? productos.find((p: any) => p.id === productoId) : null;
+    return prod ? prod.cantidadStock : 0;
+  };
+
+  const getCartQuantity = (productoId: number): number => {
+    const item = cart.find((i) => i.productoId === productoId);
+    return item ? item.cantidad : 0;
+  };
+
   const handleAddProduct = (p: Producto) => {
+    if (getCartQuantity(p.id) >= p.cantidadStock) {
+      setApiError(`Stock insuficiente para "${p.nombre}". Disponible: ${p.cantidadStock}`);
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((i) => i.productoId === p.id);
       if (existing) {
@@ -101,6 +122,11 @@ export const POS: React.FC = () => {
 
   const handleUpdateQuantity = (id: number, qty: number) => {
     if (qty < 1) return;
+    const stock = getProductStock(id);
+    if (qty > stock) {
+      setApiError(`Stock insuficiente. Disponible: ${stock}`);
+      return;
+    }
     setCart((prev) => prev.map((i) => (i.productoId === id ? { ...i, cantidad: qty } : i)));
   };
 
@@ -263,8 +289,15 @@ export const POS: React.FC = () => {
            </div>
          </header>
 
-         {/* Grid de Productos Scrollable */}
-         <div className="flex-1 overflow-y-auto p-3 md:p-6 min-h-0 pb-24 md:pb-6">
+          {apiError && (
+            <div className="mx-3 md:mx-6 mt-3 md:mt-6 px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
+              <span className="flex-1">{apiError}</span>
+              <button onClick={() => setApiError(null)} className="text-red-400 hover:text-red-600 p-1"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
+
+          {/* Grid de Productos Scrollable */}
+          <div className="flex-1 overflow-y-auto p-3 md:p-6 min-h-0 pb-24 md:pb-6">
            {isLoadingProductos ? (
               <div className="flex items-center justify-center h-full text-slate-400/80 text-sm font-medium animate-pulse">
                  <Clock className="w-5 h-5 animate-spin text-blue-500 mr-2" /> Cargando catálogo...
@@ -290,8 +323,9 @@ export const POS: React.FC = () => {
                       </div>
 
                       <div className="p-2.5 md:p-4 bg-white w-full border-t border-slate-100">
-                         <h4 className="font-bold text-xs md:text-sm text-slate-800 line-clamp-1 mb-0.5 md:mb-1 group-hover:text-blue-600 transition-colors">{p.nombre}</h4>
-                         <p className="text-blue-600 font-extrabold text-sm md:text-base">${Number(p.precio).toFixed(2)}</p>
+                          <h4 className="font-bold text-xs md:text-sm text-slate-800 line-clamp-1 mb-0.5 md:mb-1 group-hover:text-blue-600 transition-colors">{p.nombre}</h4>
+                          <p className="text-blue-600 font-extrabold text-sm md:text-base">${Number(p.precio).toFixed(2)}</p>
+                          <p className={`text-[10px] font-bold mt-1 ${p.cantidadStock <= 5 ? 'text-red-500' : 'text-slate-400'}`}>Stock: {p.cantidadStock}</p>
                       </div>
                     </button>
                  ))}
@@ -358,16 +392,17 @@ export const POS: React.FC = () => {
                            <ShoppingBag className="w-5 h-5" />
                         </div>
                      )}
-                     <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-slate-800 text-sm line-clamp-1">{i.nombre}</h4>
-                        <p className="text-xs font-black text-blue-600">${i.precio.toFixed(2)}</p>
-                        
-                        <div className="flex items-center gap-2 mt-2">
-                           <button onClick={() => handleUpdateQuantity(i.productoId, i.cantidad - 1)} className="p-1 border bg-white border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"><Minus className="w-3.5 h-3.5" /></button>
-                           <span className="font-black text-xs text-slate-800 w-4 text-center">{i.cantidad}</span>
-                           <button onClick={() => handleUpdateQuantity(i.productoId, i.cantidad + 1)} className="p-1 border bg-white border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"><Plus className="w-3.5 h-3.5" /></button>
-                        </div>
-                     </div>
+                      <div className="flex-1 min-w-0">
+                         <h4 className="font-bold text-slate-800 text-sm line-clamp-1">{i.nombre}</h4>
+                         <p className="text-xs font-black text-blue-600">${i.precio.toFixed(2)}</p>
+                         <p className={`text-[10px] font-bold ${getProductStock(i.productoId) <= 5 ? 'text-red-400' : 'text-slate-400'}`}>Stock disp: {getProductStock(i.productoId)}</p>
+                         
+                         <div className="flex items-center gap-2 mt-2">
+                            <button onClick={() => handleUpdateQuantity(i.productoId, i.cantidad - 1)} className="p-1 border bg-white border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"><Minus className="w-3.5 h-3.5" /></button>
+                            <span className="font-black text-xs text-slate-800 w-4 text-center">{i.cantidad}</span>
+                            <button onClick={() => handleUpdateQuantity(i.productoId, i.cantidad + 1)} disabled={i.cantidad >= getProductStock(i.productoId)} className="p-1 border bg-white border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"><Plus className="w-3.5 h-3.5" /></button>
+                         </div>
+                      </div>
                      <button onClick={() => handleRemoveItem(i.productoId)} className="text-slate-400 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity p-1"><Trash2 className="w-4 h-4" /></button>
                   </div>
                ))
@@ -419,19 +454,21 @@ export const POS: React.FC = () => {
                <form onSubmit={handleFinalizarVenta} className="space-y-6 flex-1 flex flex-col justify-between">
                   <div className="space-y-6">
                      <label className="block text-sm font-black text-slate-700 uppercase tracking-wide">Método de Pago</label>
-                     <div className="grid grid-cols-2 gap-4">
-                        <label className={`flex flex-col items-center justify-center p-5 border-2 rounded-2xl cursor-pointer transition-all ${metodoPago === 'MERCADO_PAGO' ? 'border-blue-500 bg-blue-50/30 text-blue-800 font-bold shadow-md' : 'border-slate-100 hover:border-slate-200 text-slate-500 bg-slate-50'}`}>
-                           <input type="radio" value="MERCADO_PAGO" checked={metodoPago === 'MERCADO_PAGO'} onChange={() => setMetodoPago('MERCADO_PAGO')} className="sr-only" />
-                           <CreditCard className="w-6 h-6 mb-2 text-inherit" />
-                           <span className="text-xs">M. Pago</span>
-                        </label>
+                      <div className={`grid ${mpHabilitado ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+                         {mpHabilitado && (
+                         <label className={`flex flex-col items-center justify-center p-5 border-2 rounded-2xl cursor-pointer transition-all ${metodoPago === 'MERCADO_PAGO' ? 'border-blue-500 bg-blue-50/30 text-blue-800 font-bold shadow-md' : 'border-slate-100 hover:border-slate-200 text-slate-500 bg-slate-50'}`}>
+                            <input type="radio" value="MERCADO_PAGO" checked={metodoPago === 'MERCADO_PAGO'} onChange={() => setMetodoPago('MERCADO_PAGO')} className="sr-only" />
+                            <CreditCard className="w-6 h-6 mb-2 text-inherit" />
+                            <span className="text-xs">M. Pago</span>
+                         </label>
+                         )}
 
-                        <label className={`flex flex-col items-center justify-center p-5 border-2 rounded-2xl cursor-pointer transition-all ${metodoPago === 'EFECTIVO' ? 'border-emerald-500 bg-emerald-50/30 text-emerald-800 font-bold shadow-md' : 'border-slate-100 hover:border-slate-200 text-slate-500 bg-slate-50'}`}>
-                           <input type="radio" value="EFECTIVO" checked={metodoPago === 'EFECTIVO'} onChange={() => setMetodoPago('EFECTIVO')} className="sr-only" />
-                           <Banknote className="w-6 h-6 mb-2 text-inherit" />
-                           <span className="text-xs">Efectivo</span>
-                        </label>
-                     </div>
+                         <label className={`flex flex-col items-center justify-center p-5 border-2 rounded-2xl cursor-pointer transition-all ${metodoPago === 'EFECTIVO' ? 'border-emerald-500 bg-emerald-50/30 text-emerald-800 font-bold shadow-md' : 'border-slate-100 hover:border-slate-200 text-slate-500 bg-slate-50'}`}>
+                            <input type="radio" value="EFECTIVO" checked={metodoPago === 'EFECTIVO'} onChange={() => setMetodoPago('EFECTIVO')} className="sr-only" />
+                            <Banknote className="w-6 h-6 mb-2 text-inherit" />
+                            <span className="text-xs">Efectivo</span>
+                         </label>
+                      </div>
 
                      {metodoPago === 'EFECTIVO' && (
                         <div className="bg-slate-900 p-6 rounded-3xl text-white space-y-4 shadow-xl">

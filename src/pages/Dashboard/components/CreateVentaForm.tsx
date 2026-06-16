@@ -35,7 +35,7 @@ const ventaSchema: yup.ObjectSchema<VentaFormInputs> = yup.object().shape({
     .transform((value) => (isNaN(value) || value === 0 ? null : value))
     .default(null),
   observaciones: yup.string().optional(),
-  metodoPago: yup.string().oneOf(['MERCADO_PAGO', 'EFECTIVO']).required().default('MERCADO_PAGO'),
+  metodoPago: yup.string().oneOf(['MERCADO_PAGO', 'EFECTIVO']).required().default('EFECTIVO'),
   montoAbonado: yup.number().transform((value) => (isNaN(value) ? undefined : value)).optional(),
 }) as yup.ObjectSchema<VentaFormInputs>;
 
@@ -57,16 +57,25 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
   const { data: categorias } = useSWR('/categorias', fetcher);
   const { data: globalConfig } = useSWR('/config', fetcher);
 
+  const mpHabilitado = globalConfig?.mpAceptarCredito || globalConfig?.mpAceptarDebito;
+
   const {
     register,
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<VentaFormInputs>({
     resolver: yupResolver(ventaSchema),
-    defaultValues: { clienteId: null, metodoPago: 'MERCADO_PAGO', montoAbonado: 0 },
+    defaultValues: { clienteId: null, metodoPago: 'EFECTIVO', montoAbonado: 0 },
   });
+
+  React.useEffect(() => {
+    if (globalConfig) {
+      setValue('metodoPago', (mpHabilitado ? 'MERCADO_PAGO' : 'EFECTIVO') as 'EFECTIVO' | 'MERCADO_PAGO');
+    }
+  }, [globalConfig]);
 
   const [metodoPago, montoAbonado] = watch(['metodoPago', 'montoAbonado']);
   const esEfectivo = metodoPago === 'EFECTIVO';
@@ -196,20 +205,22 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
            <p className="text-slate-500 mb-8 font-medium text-lg">El comprobante <span className="text-indigo-600 font-bold">#{createdVentaId}</span> ha sido guardado.</p>
            
            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-             <button
-               onClick={handleGeneratePaymentLink}
-               disabled={isGeneratingLink}
-               className="flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-4 font-bold text-white transition-all bg-[#009EE3] rounded-xl hover:bg-[#008ACA] shadow-lg disabled:opacity-50"
-             >
-               {isGeneratingLink ? 'Conectando...' : 'Generar Link de Mercado Pago'}
-             </button>
-  
-             <button 
-               onClick={() => { setCreatedVentaId(null); setApiError(null); }}
-               className="w-full sm:w-auto px-8 py-4 font-bold text-slate-600 transition-all bg-slate-50 rounded-xl hover:bg-slate-100 border border-slate-200 shadow-sm"
-             >
-               Registrar Otra Venta
-             </button>
+              {mpHabilitado && (
+              <button
+                onClick={handleGeneratePaymentLink}
+                disabled={isGeneratingLink}
+                className="flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-4 font-bold text-white transition-all bg-[#009EE3] rounded-xl hover:bg-[#008ACA] shadow-lg disabled:opacity-50"
+              >
+                {isGeneratingLink ? 'Conectando...' : 'Generar Link de Mercado Pago'}
+              </button>
+              )}
+   
+              <button 
+                onClick={() => { setCreatedVentaId(null); setApiError(null); }}
+                className="w-full sm:w-auto px-8 py-4 font-bold text-slate-600 transition-all bg-slate-50 rounded-xl hover:bg-slate-100 border border-slate-200 shadow-sm"
+              >
+                Registrar Otra Venta
+              </button>
            </div>
         </div>
       </>
@@ -403,21 +414,23 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
           <div className="space-y-6">
             <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
               <label className="block text-sm font-bold text-slate-800 uppercase tracking-wide mb-4">Método de Pago</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className={`flex items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all ${!esEfectivo ? 'border-blue-500 bg-blue-50/50 text-blue-700 shadow-sm' : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50 text-slate-600'}`}>
-                  <input type="radio" value="MERCADO_PAGO" {...register('metodoPago')} className="sr-only" disabled={isSubmitting} />
-                  <div className="flex items-center gap-2 font-bold text-sm">
-                    🔗 Mercado Pago (Link)
-                  </div>
-                </label>
+               <div className={`grid grid-cols-1 ${mpHabilitado ? 'sm:grid-cols-2' : ''} gap-3`}>
+                 {mpHabilitado && (
+                 <label className={`flex items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all ${!esEfectivo ? 'border-blue-500 bg-blue-50/50 text-blue-700 shadow-sm' : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50 text-slate-600'}`}>
+                   <input type="radio" value="MERCADO_PAGO" {...register('metodoPago')} className="sr-only" disabled={isSubmitting} />
+                   <div className="flex items-center gap-2 font-bold text-sm">
+                     🔗 Mercado Pago (Link)
+                   </div>
+                 </label>
+                 )}
 
-                <label className={`flex items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all ${esEfectivo ? 'border-emerald-500 bg-emerald-50/50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50 text-slate-600'}`}>
-                  <input type="radio" value="EFECTIVO" {...register('metodoPago')} className="sr-only" disabled={isSubmitting} />
-                  <div className="flex items-center gap-2 font-bold text-sm">
-                    💵 Efectivo (En el local)
-                  </div>
-                </label>
-              </div>
+                 <label className={`flex items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all ${esEfectivo ? 'border-emerald-500 bg-emerald-50/50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50 text-slate-600'}`}>
+                   <input type="radio" value="EFECTIVO" {...register('metodoPago')} className="sr-only" disabled={isSubmitting} />
+                   <div className="flex items-center gap-2 font-bold text-sm">
+                     💵 Efectivo (En el local)
+                   </div>
+                 </label>
+               </div>
             </div>
 
             {esEfectivo && (
