@@ -50,7 +50,7 @@ export const POS: React.FC = () => {
     if (!mpHabilitado && metodoPago === 'MERCADO_PAGO') {
       setMetodoPago('EFECTIVO');
     }
-  }, [mpHabilitado]);
+  }, [mpHabilitado, metodoPago]);
   const [apiError, setApiError] = useState<string | null>(null);
   const [successVentaId, setSuccessVentaId] = useState<string | number | null>(null);
   const [vueltoFinal, setVueltoFinal] = useState<number>(0);

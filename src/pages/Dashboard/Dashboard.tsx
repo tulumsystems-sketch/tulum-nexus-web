@@ -286,23 +286,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleCloseCajaQuick = async () => {
-    if (!window.confirm('¿Estás seguro de que deseas cerrar la caja con monto en cero?')) return;
-    
-    setIsClosingCaja(true);
-    try {
-      await apiClient.post('/caja/cierre', { montoFinalReal: 0 });
-      const stateRes = await apiClient.get('/caja/estado');
-      setCaja(stateRes.data);
-      alert('✅ Caja cerrada correctamente.');
-    } catch (error: any) {
-      console.error('Error al cerrar caja (quick):', error);
-      alert('Error al cerrar la caja. ' + (error.response?.data?.message || ''));
-    } finally {
-      setIsClosingCaja(false);
-    }
-  };
-
   // Loaders
   if (isLoadingCaja || isLoadingCategorias || isLoadingProductos || isLoadingClientes || isLoadingVentas) {
     return (
