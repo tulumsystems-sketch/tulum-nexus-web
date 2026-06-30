@@ -266,10 +266,10 @@ export const POS: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col md:flex-row bg-[#eef3f8] font-sans text-slate-800 overflow-hidden relative">
+    <div className="tulum-dark h-screen w-screen flex flex-col md:flex-row bg-slate-950 font-sans text-slate-100 overflow-hidden relative">
       
       {/* Lado Izquierdo: Buscador + Grilla (Modo Zen) */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#f6f8fb]">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950">
          <header className="px-3 py-3 md:px-6 md:py-5 bg-slate-950 text-white border-b border-slate-800 flex items-center gap-2 md:gap-4 sticky top-0 z-10 flex-shrink-0 shadow-xl shadow-slate-300/30">
            <button 
              onClick={() => navigate('/dashboard')}

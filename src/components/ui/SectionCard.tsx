@@ -17,12 +17,12 @@ export const SectionCard: React.FC<SectionCardProps> = ({
   className = '',
   bodyClassName = '',
 }) => (
-  <section className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/70 ${className}`}>
+  <section className={`overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/88 shadow-xl shadow-black/25 ${className}`}>
     {(title || description || action) && (
-      <div className="flex flex-col gap-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-slate-800 bg-slate-900 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          {title && <h3 className="text-lg font-black tracking-tight text-slate-900">{title}</h3>}
-          {description && <p className="mt-1 text-sm font-medium text-slate-500">{description}</p>}
+          {title && <h3 className="text-lg font-black tracking-tight text-slate-100">{title}</h3>}
+          {description && <p className="mt-1 text-sm font-medium text-slate-400">{description}</p>}
         </div>
         {action && <div className="flex-shrink-0">{action}</div>}
       </div>

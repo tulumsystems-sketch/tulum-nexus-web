@@ -5,6 +5,7 @@ import apiClient from '../../../api/axiosConfig';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { LoadingState } from '../../../components/ui/LoadingState';
+import { PageHeader } from '../../../components/ui/PageHeader';
 import { StatusPill } from '../../../components/ui/StatusPill';
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
@@ -46,6 +47,14 @@ export const MovimientosStockTab: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <PageHeader
+        eyebrow="Inventario trazable"
+        title="Movimientos de stock"
+        description="Lee entradas, salidas, ajustes y referencias operativas con una tabla preparada para auditoria."
+        icon={Boxes}
+        meta={<StatusPill label={`${movements.length} movimientos`} tone="blue" />}
+      />
+
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
