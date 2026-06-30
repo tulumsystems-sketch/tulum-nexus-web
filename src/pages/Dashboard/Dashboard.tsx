@@ -2,22 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import {
-  Activity,
   AlertTriangle,
   BarChart3,
-  Boxes,
-  Building2,
-  CreditCard,
   DollarSign,
-  Home,
   Package,
   Plus,
   Receipt,
   Search,
-  Tags,
   TrendingUp,
-  Truck,
-  Users,
 } from 'lucide-react';
 import apiClient from '../../api/axiosConfig';
 import { CreateCategoryForm } from './components/CreateCategoryForm';
@@ -909,38 +901,33 @@ export const Dashboard: React.FC = () => {
 
           {/* TAB: DASHBOARD */}
           {activeTab === 'dashboard' && (
-            <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {/* Stat Cards Metrics Row */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5">
-                   <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                   </div>
-                   <div>
-                     <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Total Ventas</p>
-                     <h3 className="text-2xl font-black text-slate-800">{totalVentas}</h3>
-                   </div>
-                </div>
+            <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <PageHeader
+                eyebrow="Operacion en tiempo real"
+                title={`${globalConfig?.nombreEmpresa || 'Tulum Core'} listo para operar`}
+                description="Panel ejecutivo para seguir ventas, caja, stock y actividad comercial sin perder foco operativo."
+                icon={BarChart3}
+                meta={
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill label={cajaAbierta ? 'Caja abierta' : 'Caja cerrada'} tone={cajaAbierta ? 'emerald' : 'amber'} />
+                    <StatusPill label={`${totalProductos} productos`} tone="blue" />
+                    <StatusPill label={`${productosBajoStock} alertas stock`} tone={productosBajoStock > 0 ? 'amber' : 'emerald'} />
+                  </div>
+                }
+                action={
+                  cajaAbierta ? (
+                    <AppButton variant="secondary" onClick={() => setIsClosingModalOpen(true)}>Cerrar caja</AppButton>
+                  ) : (
+                    <AppButton variant="success" onClick={() => setIsAperturaModalOpen(true)}>Abrir caja</AppButton>
+                  )
+                }
+              />
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5">
-                   <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                   </div>
-                   <div>
-                     <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Ingresos Totales</p>
-                     <h3 className="text-2xl font-black text-slate-800">${ingresosTotales.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
-                   </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-5">
-                   <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                   </div>
-                   <div>
-                     <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Ticket Promedio</p>
-                     <h3 className="text-2xl font-black text-slate-800">${ticketPromedio.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
-                   </div>
-                </div>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                <MetricCard label="Ventas" value={totalVentas} helper="Operaciones registradas" icon={Receipt} tone="blue" />
+                <MetricCard label="Ingresos" value={`$${ingresosTotales.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} helper="Facturacion total" icon={DollarSign} tone="emerald" />
+                <MetricCard label="Ticket promedio" value={`$${ticketPromedio.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} helper="Promedio por venta" icon={TrendingUp} tone="indigo" />
+                <MetricCard label="Stock critico" value={productosBajoStock} helper="Productos en alerta" icon={AlertTriangle} tone={productosBajoStock > 0 ? 'amber' : 'slate'} />
               </div>
 
               {/* Gráfico de Ventas Historial Recharts */}

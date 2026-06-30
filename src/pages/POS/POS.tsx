@@ -266,14 +266,14 @@ export const POS: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col md:flex-row bg-slate-100 font-sans text-slate-800 overflow-hidden relative">
+    <div className="h-screen w-screen flex flex-col md:flex-row bg-[#eef3f8] font-sans text-slate-800 overflow-hidden relative">
       
       {/* Lado Izquierdo: Buscador + Grilla (Modo Zen) */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50">
-         <header className="px-3 py-3 md:px-6 md:py-5 bg-white border-b border-slate-200 flex items-center gap-2 md:gap-4 sticky top-0 z-10 flex-shrink-0 shadow-sm">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#f6f8fb]">
+         <header className="px-3 py-3 md:px-6 md:py-5 bg-slate-950 text-white border-b border-slate-800 flex items-center gap-2 md:gap-4 sticky top-0 z-10 flex-shrink-0 shadow-xl shadow-slate-300/30">
            <button 
              onClick={() => navigate('/dashboard')}
-             className="px-2 py-2 md:px-3 bg-slate-100 border border-slate-200 rounded-xl hover:bg-red-50 hover:border-red-100 hover:text-red-500 text-slate-500 transition-all font-bold text-xs flex items-center gap-1 md:gap-1.5 shadow-sm flex-shrink-0"
+             className="px-2 py-2 md:px-3 bg-white/10 border border-white/10 rounded-xl hover:bg-white hover:text-slate-900 text-slate-200 transition-all font-bold text-xs flex items-center gap-1 md:gap-1.5 shadow-sm flex-shrink-0"
              title="Volver"
            >
              <ArrowLeft className="w-4 h-4" />
@@ -288,8 +288,12 @@ export const POS: React.FC = () => {
                 placeholder="Buscar productos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 md:pl-12 pr-4 py-2.5 md:py-3.5 rounded-2xl border-2 border-slate-100 focus:border-blue-500 outline-none transition-all text-sm font-bold bg-slate-50 focus:bg-white shadow-inner"
+                className="w-full pl-10 md:pl-12 pr-4 py-2.5 md:py-3.5 rounded-2xl border border-white/10 focus:border-blue-300 outline-none transition-all text-sm font-bold bg-white/10 focus:bg-white focus:text-slate-900 placeholder:text-slate-400 shadow-inner"
               />
+           </div>
+           <div className="hidden lg:block rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-right">
+             <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total actual</div>
+             <div className="text-lg font-black text-white">${totalVenta.toFixed(2)}</div>
            </div>
          </header>
 
@@ -307,29 +311,34 @@ export const POS: React.FC = () => {
                  <Clock className="w-5 h-5 animate-spin text-blue-500 mr-2" /> Cargando catálogo...
               </div>
            ) : Array.isArray(productos) && productos.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
                  {productos.map((p: Producto) => (
                     <button
                       key={p.id}
                       onClick={() => handleAddProduct(p)}
                       disabled={p.cantidadStock <= 0}
-                      className="group flex flex-col bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left relative focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
+                      className="group flex flex-col bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm shadow-slate-200/70 hover:shadow-2xl hover:shadow-blue-100 hover:-translate-y-1 transition-all duration-300 text-left relative focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
                     >
-                      <div className="aspect-square w-full bg-slate-100 flex items-center justify-center relative overflow-hidden p-2">
+                      <div className="aspect-square w-full bg-gradient-to-br from-slate-100 to-white flex items-center justify-center relative overflow-hidden p-3">
                         {p.imageUrl ? (
                           <img src={p.imageUrl} alt={p.nombre} className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-300" />
                         ) : (
                           <ShoppingBag className="w-12 h-12 text-slate-300" />
                         )}
                         {p.cantidadStock <= 0 && (
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-bold text-xs">Sin stock</div>
+                          <div className="absolute inset-0 bg-slate-950/70 flex items-center justify-center text-white font-black text-xs uppercase tracking-widest">Sin stock</div>
+                        )}
+                        {p.cantidadStock > 0 && p.cantidadStock <= 5 && (
+                          <span className="absolute left-3 top-3 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">Bajo stock</span>
                         )}
                       </div>
 
-                      <div className="p-2.5 md:p-4 bg-white w-full border-t border-slate-100">
-                          <h4 className="font-bold text-xs md:text-sm text-slate-800 line-clamp-1 mb-0.5 md:mb-1 group-hover:text-blue-600 transition-colors">{p.nombre}</h4>
-                          <p className="text-blue-600 font-extrabold text-sm md:text-base">${Number(p.precio).toFixed(2)}</p>
-                          <p className={`text-[10px] font-bold mt-1 ${p.cantidadStock <= 5 ? 'text-red-500' : 'text-slate-400'}`}>Stock: {p.cantidadStock}</p>
+                      <div className="p-3 md:p-4 bg-white w-full border-t border-slate-100">
+                          <h4 className="font-black text-xs md:text-sm text-slate-900 line-clamp-2 min-h-[2.25rem] group-hover:text-blue-600 transition-colors">{p.nombre}</h4>
+                          <div className="mt-3 flex items-end justify-between gap-2">
+                            <p className="text-blue-600 font-black text-base md:text-lg">${Number(p.precio).toFixed(2)}</p>
+                            <p className={`rounded-full px-2 py-1 text-[10px] font-black ${p.cantidadStock <= 0 ? 'bg-red-50 text-red-600' : p.cantidadStock <= 5 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{p.cantidadStock} disp.</p>
+                          </div>
                       </div>
                     </button>
                  ))}
@@ -366,8 +375,8 @@ export const POS: React.FC = () => {
       )}
 
       {/* Lado Derecho: Carrito de Compras (Fixed Sticky Panel) */}
-      <div className={`fixed inset-y-0 right-0 z-50 w-full sm:w-96 flex flex-col h-full bg-white border-l border-slate-200 flex-shrink-0 shadow-xl transition-transform duration-300 md:static md:w-96 md:translate-x-0 md:z-20 ${showMobileCart ? 'translate-x-0' : 'translate-x-full'}`}>
-         <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-2">
+      <div className={`fixed inset-y-0 right-0 z-50 w-full sm:w-96 flex flex-col h-full bg-white border-l border-slate-200 flex-shrink-0 shadow-2xl shadow-slate-300 transition-transform duration-300 md:static md:w-96 md:translate-x-0 md:z-20 ${showMobileCart ? 'translate-x-0' : 'translate-x-full'}`}>
+         <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center gap-2">
             {/* Close button (mobile only) */}
             <button
               onClick={() => setShowMobileCart(false)}
@@ -376,8 +385,8 @@ export const POS: React.FC = () => {
               <X className="w-5 h-5" />
             </button>
             <ShoppingBag className="w-5 h-5 text-blue-600 font-bold" />
-            <h3 className="font-bold text-base text-slate-800 tracking-tight">Orden Actual</h3>
-            <span className="text-xs bg-slate-100 font-bold text-slate-600 px-2 py-0.5 rounded-full ml-auto">
+            <h3 className="font-black text-base text-slate-900 tracking-tight">Orden Actual</h3>
+            <span className="text-xs bg-blue-50 font-black text-blue-700 px-2.5 py-1 rounded-full ml-auto">
                {cart.length} ítems
             </span>
          </div>
@@ -390,7 +399,7 @@ export const POS: React.FC = () => {
                </div>
             ) : (
                cart.map((i) => (
-                  <div key={i.productoId} className="flex gap-3 bg-slate-50/50 border border-slate-100 rounded-2xl p-3 items-center group shadow-sm">
+                  <div key={i.productoId} className="flex gap-3 bg-white border border-slate-200 rounded-2xl p-3 items-center group shadow-sm shadow-slate-200/60">
                      {i.imageUrl ? (
                         <img src={i.imageUrl} alt={i.nombre} className="w-12 h-12 object-contain rounded-xl flex-shrink-0 bg-white p-1 border" />
                      ) : (
@@ -416,19 +425,19 @@ export const POS: React.FC = () => {
          </div>
 
          {/* Bottom Resumen y Acción */}
-         <div className="p-6 border-t border-slate-100 bg-slate-50 space-y-4 flex-shrink-0">
+         <div className="p-6 border-t border-slate-100 bg-slate-950 text-white space-y-4 flex-shrink-0">
             <div className="space-y-1">
                <div className="flex justify-between text-xs text-slate-400 font-bold">
                   <span>Neto:</span>
-                  <span>${subtotalNeto.toFixed(2)}</span>
+                  <span className="text-slate-200">${subtotalNeto.toFixed(2)}</span>
                </div>
-               <div className="flex justify-between text-xs text-slate-400 font-bold border-b border-slate-200 pb-1.5">
+               <div className="flex justify-between text-xs text-slate-400 font-bold border-b border-slate-800 pb-1.5">
                   <span>IVA (21%):</span>
-                  <span>${calculoIva.toFixed(2)}</span>
+                  <span className="text-slate-200">${calculoIva.toFixed(2)}</span>
                </div>
                <div className="flex justify-between items-baseline pt-2">
                   <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total Operación</span>
-                  <span className="text-3xl font-black text-slate-900 tracking-tighter">
+                  <span className="text-3xl font-black text-white tracking-tighter">
                      ${totalVenta.toFixed(2)}
                   </span>
                </div>
@@ -437,7 +446,7 @@ export const POS: React.FC = () => {
             <button 
               onClick={() => { setIsDrawerOpen(true); setShowMobileCart(false); }}
               disabled={cart.length === 0}
-              className="w-full py-4 text-base font-bold text-white bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 active:translate-y-0.5"
+              className="w-full py-4 text-base font-black text-slate-950 bg-white rounded-2xl shadow-lg shadow-white/10 hover:bg-blue-50 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 active:translate-y-0.5"
             >
                Finalizar Venta
             </button>
