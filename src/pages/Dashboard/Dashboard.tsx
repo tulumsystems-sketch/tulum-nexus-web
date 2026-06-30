@@ -388,7 +388,7 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f6f8fb] font-sans text-slate-800 selection:bg-blue-100 selection:text-blue-900">
+    <div className="tulum-dark flex h-screen overflow-hidden bg-slate-950 font-sans text-slate-100 selection:bg-blue-500/30 selection:text-white">
       
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
@@ -642,10 +642,10 @@ export const Dashboard: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-screen relative z-10 bg-[#f6f8fb]">
+      <main className="flex-1 flex flex-col min-w-0 h-screen relative z-10 bg-slate-950">
         
         {/* Topbar Header */}
-        <header className="bg-white/85 backdrop-blur-md border-b border-slate-200 px-4 py-4 lg:px-10 lg:py-5 flex items-center justify-between sticky top-0 z-10 gap-3 shadow-sm shadow-slate-200/60">
+        <header className="bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 py-4 lg:px-10 lg:py-5 flex items-center justify-between sticky top-0 z-10 gap-3 shadow-sm shadow-black/30">
            {/* Hamburger (mobile only) */}
            <button
              onClick={() => setSidebarOpen(true)}

@@ -5,6 +5,7 @@ import apiClient from '../../../api/axiosConfig';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { LoadingState } from '../../../components/ui/LoadingState';
+import { PageHeader } from '../../../components/ui/PageHeader';
 import { StatusPill } from '../../../components/ui/StatusPill';
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
@@ -125,6 +126,14 @@ export const ComprasTab: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <PageHeader
+        eyebrow="Abastecimiento"
+        title="Compras a proveedores"
+        description="Controla pedidos, recepcion de mercaderia y actualizacion de stock desde una vista operativa."
+        icon={ClipboardList}
+        meta={<StatusPill label={`${compraList.length} compras`} tone="blue" />}
+      />
+
       {feedback && <ErrorAlert type={feedback.type} message={feedback.message} />}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
