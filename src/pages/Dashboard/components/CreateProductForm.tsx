@@ -124,13 +124,18 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
       if (selectedFile) {
         const formData = new FormData();
         formData.append('file', selectedFile);
-        
-        const uploadRes = await apiClient.post('/media/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' } // Authorization ya lo maneja apiClient internamente
-        });
-        
-        if (uploadRes.data && uploadRes.data.url) {
-          finalImageUrl = uploadRes.data.url;
+
+        try {
+          const uploadRes = await apiClient.post('/media/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' } // Authorization ya lo maneja apiClient internamente
+          });
+          
+          if (uploadRes.data && uploadRes.data.url) {
+            finalImageUrl = uploadRes.data.url;
+          }
+        } catch {
+          setApiError('No pudimos subir la imagen. Proba con JPG, PNG o WebP y un archivo mas liviano.');
+          return;
         }
       }
 
@@ -155,8 +160,6 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
       clearFile();
       onProductCreated();
     } catch (error: any) {
-      console.error("DETALLE DEL ERROR AL CREAR PRODUCTO:", error);
-
       if (!error.response) {
         setApiError('No se pudo conectar con el servidor.');
         return;

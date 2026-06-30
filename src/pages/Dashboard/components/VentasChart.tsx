@@ -44,7 +44,7 @@ export const VentasChart: React.FC = () => {
   if (error) {
     return (
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center h-80 text-red-500 text-sm font-medium">
-        <AlertCircle className="w-5 h-5 mr-2" /> Error al consultar historial de cajas.
+        <AlertCircle className="w-5 h-5 mr-2" /> No pudimos cargar el resumen de ventas.
       </div>
     );
   }
@@ -59,8 +59,12 @@ export const VentasChart: React.FC = () => {
       </div>
 
       {chartData.length === 0 ? (
-        <div className="h-64 flex flex-col items-center justify-center text-slate-400 italic">
-          No hay datos de historial para graficar.
+        <div className="h-64 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center">
+          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-white text-slate-300 shadow-sm">
+            <AlertCircle className="h-6 w-6" />
+          </div>
+          <p className="font-bold text-slate-700">Todavia no hay ventas para graficar</p>
+          <p className="mt-1 text-sm font-medium text-slate-500">Cuando registres operaciones, el resumen semanal aparecera aca.</p>
         </div>
       ) : (
         <div className="h-72">

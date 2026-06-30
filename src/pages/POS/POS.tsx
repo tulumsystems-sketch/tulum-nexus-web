@@ -97,9 +97,10 @@ export const POS: React.FC = () => {
 
   const handleAddProduct = (p: Producto) => {
     if (getCartQuantity(p.id) >= p.cantidadStock) {
-      setApiError(`Stock insuficiente para "${p.nombre}". Disponible: ${p.cantidadStock}`);
+      setApiError(`No hay stock suficiente para "${p.nombre}". Disponible: ${p.cantidadStock}.`);
       return;
     }
+    setApiError(null);
     setCart((prev) => {
       const existing = prev.find((i) => i.productoId === p.id);
       if (existing) {
@@ -124,9 +125,10 @@ export const POS: React.FC = () => {
     if (qty < 1) return;
     const stock = getProductStock(id);
     if (qty > stock) {
-      setApiError(`Stock insuficiente. Disponible: ${stock}`);
+      setApiError(`No hay stock suficiente. Disponible: ${stock}.`);
       return;
     }
+    setApiError(null);
     setCart((prev) => prev.map((i) => (i.productoId === id ? { ...i, cantidad: qty } : i)));
   };
 
@@ -172,7 +174,10 @@ export const POS: React.FC = () => {
       setMontoAbonado('');
 
     } catch (err: any) {
-      setApiError(err.response?.data?.message || 'Error al procesar la venta.');
+      const backendMessage = err.response?.data?.message || '';
+      setApiError(backendMessage.toLowerCase().includes('stock')
+        ? backendMessage
+        : backendMessage || 'Error al procesar la venta.');
     }
   };
 
@@ -285,7 +290,6 @@ export const POS: React.FC = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 md:pl-12 pr-4 py-2.5 md:py-3.5 rounded-2xl border-2 border-slate-100 focus:border-blue-500 outline-none transition-all text-sm font-bold bg-slate-50 focus:bg-white shadow-inner"
               />
-              <span className="absolute right-4 top-3 md:top-4 text-[10px] font-black bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-md hidden sm:inline">F2</span>
            </div>
          </header>
 
@@ -331,8 +335,10 @@ export const POS: React.FC = () => {
                  ))}
               </div>
            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400 italic">
-                 <ShoppingBag className="w-12 h-12 text-slate-200 mb-2" /> Ningún producto encontrado.
+              <div className="flex h-full flex-col items-center justify-center text-center text-slate-400">
+                 <ShoppingBag className="mb-3 h-12 w-12 text-slate-200" />
+                 <div className="font-bold text-slate-600">No encontramos productos</div>
+                 <div className="mt-1 text-sm font-medium">Proba con otra busqueda o revisa el catalogo.</div>
               </div>
            )}
          </div>

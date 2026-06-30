@@ -1,6 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  Boxes,
+  Building2,
+  CreditCard,
+  DollarSign,
+  Home,
+  Package,
+  Plus,
+  Receipt,
+  Search,
+  Tags,
+  TrendingUp,
+  Truck,
+  Users,
+} from 'lucide-react';
 import apiClient from '../../api/axiosConfig';
 import { CreateCategoryForm } from './components/CreateCategoryForm';
 import { CreateProductForm } from './components/CreateProductForm';
@@ -11,13 +29,24 @@ import { VentasChart } from './components/VentasChart';
 import { UsuariosTab } from './components/UsuariosTab';
 import { RemitosTab } from './components/RemitosTab';
 import { AlertasStock } from './components/AlertasStock';
+import { ProveedoresTab } from './components/ProveedoresTab';
+import { ComprasTab } from './components/ComprasTab';
+import { MovimientosStockTab } from './components/MovimientosStockTab';
+import { AuditoriaTab } from './components/AuditoriaTab';
+import { ErrorAlert } from '../../components/ui/ErrorAlert';
+import { AppButton } from '../../components/ui/AppButton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { MetricCard } from '../../components/ui/MetricCard';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { SectionCard } from '../../components/ui/SectionCard';
+import { StatusPill } from '../../components/ui/StatusPill';
 
 
 
 // Fetcher usando nuestro cliente Axios
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
-type TabType = 'dashboard' | 'categories' | 'products' | 'clients' | 'sales' | 'settings' | 'usuarios' | 'remitos';
+type TabType = 'dashboard' | 'categories' | 'products' | 'clients' | 'sales' | 'settings' | 'usuarios' | 'remitos' | 'proveedores' | 'compras' | 'movimientos' | 'auditoria';
 
 export const Dashboard: React.FC = () => {
   const token = localStorage.getItem('token');
@@ -38,6 +67,7 @@ export const Dashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
   const [productSearch, setProductSearch] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   // SWR Asíncrono puro - Solo disparar si hay token para evitar loops de 401/403
   const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token ? '/categorias' : null, fetcher);
@@ -99,24 +129,33 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleCategoryCreated = async () => await mutateCategorias();
-  const handleProductCreated = async () => await mutateProductos();
+  const handleProductCreated = async () => {
+    await mutateProductos();
+    notify('success', 'Producto guardado correctamente.');
+  };
   const handleClientCreated = async () => await mutateClientes();
+
+  const notify = (type: 'success' | 'error' | 'info', message: string) => {
+    setFeedback({ type, message });
+    window.setTimeout(() => setFeedback(null), 6000);
+  };
 
   const handleDeleteProduct = async (id: number) => {
     if (!window.confirm('¿Desea eliminar este producto del inventario?')) return;
     try {
       await apiClient.delete(`/productos/${id}`);
       await mutateProductos();
+      notify('success', 'Producto eliminado correctamente.');
     } catch (error: any) {
       console.error('Error al eliminar producto:', error);
-      alert('No se pudo eliminar el producto. ' + (error.response?.data?.message || ''));
+      notify('error', 'No se pudo eliminar el producto. ' + (error.response?.data?.message || ''));
     }
   };
 
   const handleCobrar = async (ventaId: number) => {
     // Validación preventiva: verificar si existe el token de Mercado Pago
     if (!globalConfig?.mpAccessToken) {
-      alert("⚠️ Acción requerida: Aún no has configurado tu Access Token de Mercado Pago.\n\nPor favor, ve a la pestaña 'Configuración', ingresa tus credenciales y vuelve a intentar.");
+      notify('error', 'Mercado Pago no esta configurado. Revisa credenciales en Configuracion antes de cobrar con link.');
       setActiveTab('settings');
       return;
     }
@@ -126,11 +165,11 @@ export const Dashboard: React.FC = () => {
       if (response.data?.url) {
         window.open(response.data.url, '_blank');
       } else {
-        alert('No se pudo generar el link de pago.');
+        notify('error', 'No se pudo generar el link de pago.');
       }
     } catch (error) {
       console.error('Error al cobrar:', error);
-      alert('Error al procesar el cobro. Intente nuevamente.');
+      notify('error', 'Error al procesar el cobro. Intente nuevamente.');
     }
   };
 
@@ -140,9 +179,10 @@ export const Dashboard: React.FC = () => {
       await apiClient.put(`/ventas/${id}/anular`);
       await mutateVentas();
       await mutateProductos();
+      notify('success', 'Venta anulada y stock devuelto correctamente.');
     } catch (error: any) {
       console.error('Error al anular venta:', error);
-      alert('Error al anular la venta. ' + (error.response?.data?.message || ''));
+      notify('error', 'Error al anular la venta. ' + (error.response?.data?.message || ''));
     }
   };
 
@@ -245,10 +285,6 @@ export const Dashboard: React.FC = () => {
     setIsOpeningCaja(true);
     const payload = { montoInicial: Number(montoInicial) };
     
-    console.log('--- ENVIANDO APERTURA DE CAJA ---');
-    console.log('Payload:', payload);
-    console.log('URL: /api/caja/apertura');
-
     try {
       await apiClient.post('/caja/apertura', payload);
       
@@ -257,10 +293,11 @@ export const Dashboard: React.FC = () => {
       setCaja(stateRes.data);
       
       setIsAperturaModalOpen(false);
-      alert('✅ Caja abierta correctamente. Ya puede comenzar a operar.');
+      setMontoInicial('');
+      notify('success', 'Caja abierta correctamente. Ya puede comenzar a operar.');
     } catch (error: any) {
       console.error('Error al abrir caja:', error);
-      alert('Error al abrir la caja. ' + (error.response?.data?.message || ''));
+      notify('error', 'Error al abrir la caja. ' + (error.response?.data?.message || ''));
     } finally {
       setIsOpeningCaja(false);
     }
@@ -277,10 +314,11 @@ export const Dashboard: React.FC = () => {
       setIsClosingModalOpen(false);
       setMontoCierre('');
       setActiveTab('dashboard');
+      notify('success', 'Caja cerrada correctamente.');
 
     } catch (error: any) {
       console.error('Error al cerrar caja:', error);
-      alert('Error al cerrar la caja. ' + (error.response?.data?.message || ''));
+      notify('error', 'Error al cerrar la caja. ' + (error.response?.data?.message || ''));
     } finally {
       setIsClosingCaja(false);
     }
@@ -325,6 +363,10 @@ export const Dashboard: React.FC = () => {
     settings: 'Configuración del Tenant',
     usuarios: 'Gestión de Usuarios',
     remitos: 'Hojas de Ruta',
+    proveedores: 'Proveedores',
+    compras: 'Compras',
+    movimientos: 'Movimientos de Stock',
+    auditoria: 'Auditoria',
   };
 
   // Cálculo de Métricas (Stat Cards) & Resumen de Caja
@@ -339,6 +381,14 @@ export const Dashboard: React.FC = () => {
   const filteredProducts = Array.isArray(productos) ? productos.filter((p: any) =>
     (p.nombre || '').toLowerCase().includes(productSearch.toLowerCase())
   ) : [];
+  const totalProductos = Array.isArray(productos) ? productos.length : 0;
+  const productosBajoStock = Array.isArray(productos)
+    ? productos.filter((p: any) => Number(p.cantidadStock || 0) <= Number(p.stockMinimo || 0)).length
+    : 0;
+  const cajaAbierta = caja?.estado === 'ABIERTA';
+  const cajaStatusMeta = cajaAbierta
+    ? `Caja abierta - efectivo esperado $${totalEsperadoCaja.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : 'Caja cerrada - abri un turno para operar en efectivo';
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -346,7 +396,7 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 font-sans text-slate-800 selection:bg-blue-100 selection:text-blue-900">
+    <div className="flex h-screen overflow-hidden bg-[#f6f8fb] font-sans text-slate-800 selection:bg-blue-100 selection:text-blue-900">
       
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
@@ -495,6 +545,55 @@ export const Dashboard: React.FC = () => {
             </button>
           )}
 
+          {!isOperador && (
+            <div className="pt-2 border-t border-white/5 space-y-2">
+              <button
+                onClick={() => handleTabChange('proveedores')}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                  activeTab === 'proveedores'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9h1m-1 4h1m-1 4h1m6-4h1m-1 4h1"></path></svg>
+                Proveedores
+              </button>
+              <button
+                onClick={() => handleTabChange('compras')}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                  activeTab === 'compras'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 14l2 2 4-4"></path></svg>
+                Compras
+              </button>
+              <button
+                onClick={() => handleTabChange('movimientos')}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                  activeTab === 'movimientos'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
+                Movimientos
+              </button>
+              <button
+                onClick={() => handleTabChange('auditoria')}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                  activeTab === 'auditoria'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"></path></svg>
+                Auditoria
+              </button>
+            </div>
+          )}
+
           {esAdmin && (
             <div className="pt-2 border-t border-white/5">
               <button
@@ -551,10 +650,10 @@ export const Dashboard: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-screen relative z-10 bg-slate-50">
+      <main className="flex-1 flex flex-col min-w-0 h-screen relative z-10 bg-[#f6f8fb]">
         
         {/* Topbar Header */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 px-4 py-4 lg:px-10 lg:py-6 flex items-center justify-between sticky top-0 z-10 gap-3">
+        <header className="bg-white/85 backdrop-blur-md border-b border-slate-200 px-4 py-4 lg:px-10 lg:py-5 flex items-center justify-between sticky top-0 z-10 gap-3 shadow-sm shadow-slate-200/60">
            {/* Hamburger (mobile only) */}
            <button
              onClick={() => setSidebarOpen(true)}
@@ -566,7 +665,7 @@ export const Dashboard: React.FC = () => {
 
            <div className="min-w-0 flex-1">
              <h2 className="text-lg lg:text-2xl font-extrabold text-slate-800 tracking-tight truncate">{tabTitles[activeTab]}</h2>
-             <p className="text-xs lg:text-sm font-medium text-slate-500 mt-0.5 hidden sm:block">Gestión administrativa y recursos del tenant.</p>
+             <p className="text-xs lg:text-sm font-medium text-slate-500 mt-0.5 hidden sm:block">{cajaStatusMeta}</p>
            </div>
            
 
@@ -574,10 +673,28 @@ export const Dashboard: React.FC = () => {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-10 min-h-0">
+          {feedback && (
+            <div className="max-w-7xl mx-auto mb-5">
+              <ErrorAlert type={feedback.type} message={feedback.message} />
+            </div>
+          )}
           
           {/* TAB: PRODUCTOS */}
           {activeTab === 'products' && (
             <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <PageHeader
+                eyebrow="Inventario comercial"
+                title="Catalogo de productos"
+                description="Controla precios, imagenes y disponibilidad desde una vista preparada para operar y mostrar en demo."
+                icon={Package}
+                meta={
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill label={`${totalProductos} productos`} tone="blue" />
+                    <StatusPill label={`${productosBajoStock} bajo stock`} tone={productosBajoStock > 0 ? 'amber' : 'emerald'} />
+                  </div>
+                }
+                action={<AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Nuevo producto</AppButton>}
+              />
               {showProductForm || editingProduct ? (
                 <div className="relative">
                   <button
@@ -595,34 +712,28 @@ export const Dashboard: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="relative flex-1 max-w-md">
-                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                  <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative flex-1 max-w-xl">
+                      <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="Buscar productos..."
+                        placeholder="Buscar por nombre de producto..."
                         value={productSearch}
                         onChange={(e) => setProductSearch(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm font-medium text-slate-700 transition-all"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm font-bold text-slate-700 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                       />
                     </div>
-                    <button
-                      onClick={() => setShowProductForm(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-200 transition-all"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path></svg>
-                      Agregar Producto
-                    </button>
+                    <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Agregar producto</AppButton>
                   </div>
 
-                  <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                      <h3 className="text-lg font-bold text-slate-800">Catálogo de Productos</h3>
-                      <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">{filteredProducts.length} Ítems</span>
-                    </div>
+                  <SectionCard
+                    title="Catalogo activo"
+                    description="Productos disponibles para ventas, remitos y compras."
+                    action={<StatusPill label={`${filteredProducts.length} items`} tone="blue" />}
+                  >
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-left text-sm text-slate-600">
-                        <thead className="bg-white border-b border-slate-100 text-xs uppercase tracking-wider text-slate-400 font-bold">
+                        <thead className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-400 font-black">
                           <tr>
                             <th className="px-6 py-4">Imagen</th>
                             <th className="px-6 py-4">Producto</th>
@@ -634,25 +745,29 @@ export const Dashboard: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {filteredProducts.length > 0 ? filteredProducts.map((col: any, index: number) => (
-                             <tr key={col.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                             <tr key={col.id} className={`transition-colors hover:bg-blue-50/30 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
                                <td className="px-6 py-3">
                                   {col.imageUrl ? (
-                                    <img src={col.imageUrl} alt={col.nombre} className="w-12 h-12 rounded-lg object-cover border border-slate-200 shadow-sm" />
+                                    <img src={col.imageUrl} alt={col.nombre} className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shadow-sm bg-slate-50" />
                                   ) : (
-                                    <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400 text-xs">Sin IMG</div>
+                                    <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400">
+                                      <Package className="h-6 w-6" />
+                                    </div>
                                   )}
                                </td>
-                               <td className="px-6 py-4 font-bold text-slate-800">{col.nombre}</td>
-                               <td className="px-6 py-4 font-medium text-slate-500">{col.categoria?.nombre || `ID: ${col.categoriaId}`}</td>
-                               <td className="px-6 py-4 font-bold text-slate-800 text-right">${Number(col.precio).toFixed(2)}</td>
+                               <td className="px-6 py-4">
+                                 <div className="font-black text-slate-900">{col.nombre}</div>
+                                 {col.medidas && <div className="mt-1 text-xs font-semibold text-slate-400">{col.medidas}</div>}
+                               </td>
+                               <td className="px-6 py-4 font-medium text-slate-500">
+                                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{col.categoria?.nombre || `ID: ${col.categoriaId}`}</span>
+                               </td>
+                               <td className="px-6 py-4 font-black text-slate-900 text-right">${Number(col.precio).toFixed(2)}</td>
                                 <td className="px-6 py-4 text-center">
-                                  <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${
-                                    col.cantidadStock <= 0 ? 'bg-red-50 text-red-700 border-red-200' :
-                                    col.stockMinimo > 0 && col.cantidadStock <= col.stockMinimo ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                    'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  }`}>
-                                    {col.cantidadStock} Unds.
-                                  </span>
+                                  <StatusPill
+                                    label={`${col.cantidadStock} unds.`}
+                                    tone={col.cantidadStock <= 0 ? 'red' : col.stockMinimo > 0 && col.cantidadStock <= col.stockMinimo ? 'amber' : 'emerald'}
+                                  />
                                 </td>
                                <td className="px-6 py-4 text-center">
                                  <div className="flex items-center justify-center gap-2">
@@ -678,12 +793,16 @@ export const Dashboard: React.FC = () => {
                                </td>
                              </tr>
                           )) : (
-                            <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-400 italic">No hay productos registrados.</td></tr>
+                            <tr>
+                              <td colSpan={6} className="px-6 py-8">
+                                <EmptyState compact title="No hay productos para mostrar" description="Crea un producto o ajusta la busqueda para ver resultados." icon={Package} />
+                              </td>
+                            </tr>
                           )}
                         </tbody>
                       </table>
                     </div>
-                  </section>
+                  </SectionCard>
                 </>
               )}
             </div>
@@ -775,6 +894,18 @@ export const Dashboard: React.FC = () => {
 
           {/* TAB: REMITOS */}
           {activeTab === 'remitos' && <RemitosTab />}
+
+          {/* TAB: PROVEEDORES */}
+          {activeTab === 'proveedores' && <ProveedoresTab />}
+
+          {/* TAB: COMPRAS */}
+          {activeTab === 'compras' && <ComprasTab />}
+
+          {/* TAB: MOVIMIENTOS */}
+          {activeTab === 'movimientos' && <MovimientosStockTab />}
+
+          {/* TAB: AUDITORIA */}
+          {activeTab === 'auditoria' && <AuditoriaTab />}
 
           {/* TAB: DASHBOARD */}
           {activeTab === 'dashboard' && (
