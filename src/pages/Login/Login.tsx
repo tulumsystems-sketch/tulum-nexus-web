@@ -77,23 +77,22 @@ export const Login: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 100));
       navigate('/dashboard');
     } catch (error: any) {
-      console.error("DETALLE DEL ERROR:", error);
 
       // Guard Clause: Manejo explicito de la falta de red/servidor caído
       if (!error.response) {
-        setApiError('No se pudo conectar con el servidor Tulum Core.');
+        setApiError('No pudimos conectar con el servidor. Revisa que el backend este activo.');
         return;
       }
 
       // Guard Clause: Manejo de HTTP 401 Credenciales Inválidas
       if (error.response.status === 401) {
-        setApiError('Credenciales incorrectas');
+        setApiError('Credenciales incorrectas. Revisa email, password y tenant.');
         return;
       }
 
       // Guard Clause: Manejo de HTTP 404 No Encontrado
       if (error.response.status === 404) {
-        setApiError('Servidor no encontrado');
+        setApiError('No encontramos el servicio de autenticacion.');
         return;
       }
 
@@ -121,7 +120,7 @@ export const Login: React.FC = () => {
           Tulum Core
         </h2>
         <p className="mb-6 text-sm text-center text-gray-400">
-          Ingresa tus credenciales y entorno empresarial
+          Ingresa con tu usuario y tenant empresarial
         </p>
 
         {apiError && (
@@ -197,7 +196,7 @@ export const Login: React.FC = () => {
             disabled={isSubmitting}
             className="w-full px-4 py-2.5 font-bold text-white transition-all bg-gradient-to-r from-emerald-600 to-cyan-600 rounded-lg hover:from-emerald-500 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20"
           >
-            {isSubmitting ? 'Verificando...' : 'Iniciar Sesión en Nexus'}
+            {isSubmitting ? 'Verificando...' : 'Ingresar a Tulum Core'}
           </button>
         </form>
       </div>
