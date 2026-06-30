@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import useSWR from 'swr';
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form';
 import apiClient from '../../../api/axiosConfig';
+import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
@@ -43,6 +44,7 @@ interface Remito {
 export const RemitosTab: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<RemitoStatus | 'TODOS'>('TODOS');
   const [isSubmittingRemito, setIsSubmittingRemito] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Data fetching
   const { data: clientes } = useSWR('/clientes', fetcher);
@@ -62,6 +64,7 @@ export const RemitosTab: React.FC = () => {
 
   const onSubmit: SubmitHandler<RemitoFormInputs> = async (data) => {
     setIsSubmittingRemito(true);
+    setFeedback(null);
     try {
       await apiClient.post('/remitos', {
         ...data,
@@ -74,22 +77,28 @@ export const RemitosTab: React.FC = () => {
       });
       reset();
       await mutateRemitos();
-      alert('Remito creado con éxito.');
+      setFeedback({ type: 'success', message: 'Remito creado correctamente.' });
     } catch (error: any) {
-      console.error(error);
-      alert('Error al crear el remito: ' + (error.response?.data?.message || 'Error desconocido'));
+      setFeedback({ type: 'error', message: 'Error al crear el remito: ' + (error.response?.data?.message || 'Error desconocido') });
     } finally {
       setIsSubmittingRemito(false);
     }
   };
 
   const updateEstado = async (id: number, nuevoEstado: RemitoStatus) => {
+    setFeedback(null);
     try {
       await apiClient.put(`/remitos/${id}/estado?estado=${nuevoEstado}`);
       await mutateRemitos();
+      setFeedback({ type: 'success', message: `Remito actualizado a ${nuevoEstado.replace('_', ' ')}.` });
     } catch (error: any) {
-      console.error(error);
-      alert('Error al actualizar el estado: ' + (error.response?.data?.message || 'Error desconocido'));
+      const backendMessage = error.response?.data?.message || 'Error desconocido';
+      setFeedback({
+        type: 'error',
+        message: backendMessage.toLowerCase().includes('stock')
+          ? backendMessage
+          : 'Error al actualizar el estado: ' + backendMessage,
+      });
     }
   };
 
@@ -109,6 +118,7 @@ export const RemitosTab: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+      {feedback && <ErrorAlert type={feedback.type} message={feedback.message} />}
 
       {/* SECCIÓN 1: FORMULARIO DE CREACIÓN */}
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -192,7 +202,7 @@ export const RemitosTab: React.FC = () => {
                     >
                       <option value="">Seleccionar...</option>
                       {productos?.map((p: any) => (
-                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                        <option key={p.id} value={p.id}>{p.nombre} - Stock: {p.cantidadStock ?? 0}</option>
                       ))}
                     </select>
                   </div>

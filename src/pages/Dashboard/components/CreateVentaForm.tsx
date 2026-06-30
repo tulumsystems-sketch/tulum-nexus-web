@@ -95,10 +95,31 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
     return matchesSearch && matchesCategory;
   }) : [];
 
+  const getProductStock = (productId: number): number => {
+    const producto = Array.isArray(productos) ? productos.find((p: any) => p.id === productId) : null;
+    return Number(producto?.cantidadStock || 0);
+  };
+
+  const getItemQuantity = (productId: number): number => {
+    return items.find((item) => item.productoId === productId)?.cantidad || 0;
+  };
+
   const handleAddItem = () => {
     if (!selectedProductId || !productos) return;
     const producto = productos.find((p: any) => p.id === Number(selectedProductId));
     if (!producto) return;
+
+    const stockDisponible = Number(producto.cantidadStock || 0);
+    if (stockDisponible <= 0) {
+      setApiError(`No hay stock disponible para "${producto.nombre}".`);
+      return;
+    }
+    if (getItemQuantity(producto.id) >= stockDisponible) {
+      setApiError(`Stock insuficiente para "${producto.nombre}". Disponible: ${stockDisponible}.`);
+      return;
+    }
+
+    setApiError(null);
 
     setItems((prev) => {
       const existing = prev.find((i) => i.productoId === producto.id);
@@ -126,6 +147,12 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
 
   const handleChangeQuantity = (prodId: number, qty: number) => {
     if (qty < 1) return;
+    const stockDisponible = getProductStock(prodId);
+    if (qty > stockDisponible) {
+      setApiError(`Stock insuficiente. Disponible: ${stockDisponible}.`);
+      return;
+    }
+    setApiError(null);
     setItems((prev) =>
       prev.map((i) => (i.productoId === prodId ? { ...i, cantidad: qty } : i))
     );
@@ -136,6 +163,12 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
 
     if (items.length === 0) {
       setApiError('Debe agregar al menos un producto a la venta.');
+      return;
+    }
+
+    const itemSinStock = items.find((item) => item.cantidad > getProductStock(item.productoId));
+    if (itemSinStock) {
+      setApiError(`No hay stock suficiente para "${itemSinStock.nombre}". Ajusta la cantidad antes de confirmar.`);
       return;
     }
 
@@ -164,12 +197,14 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
       
       onVentaCreated();
     } catch (error: any) {
-      console.error('DETALLE DEL ERROR AL REGISTRAR VENTA:', error);
       if (!error.response) {
         setApiError('No se pudo conectar con el servidor.');
         return;
       }
-      setApiError(error.response?.data?.message || 'Error desconocido al registrar la venta.');
+      const backendMessage = error.response?.data?.message || '';
+      setApiError(backendMessage.toLowerCase().includes('stock')
+        ? backendMessage
+        : backendMessage || 'Error desconocido al registrar la venta.');
     }
   };
 
@@ -185,7 +220,6 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
         setApiError('El servidor de pagos no devolvió una URL válida.');
       }
     } catch (error: any) {
-      console.error('Error generando link de pago:', error);
       setApiError(error.response?.data?.message || 'Error al conectar con Mercado Pago.');
     } finally {
       setIsGeneratingLink(false);
@@ -326,7 +360,7 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
                   </option>
                   {filteredProducts.map((p: any) => (
                     <option key={p.id} value={p.id}>
-                      {p.nombre} - ${p.precio}
+                      {p.nombre} - ${p.precio} - Stock: {p.cantidadStock ?? 0}
                     </option>
                   ))}
                 </select>
