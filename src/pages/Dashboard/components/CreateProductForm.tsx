@@ -17,6 +17,7 @@ export interface ProductFormInputs {
   precio: number;
   cantidadStock: number;
   medidas?: string;
+  codigoBarras?: string;
   categoriaId: number;
   imageUrl?: string;
   stockMinimo?: number;
@@ -39,6 +40,11 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
     .required('La cantidad en stock es obligatoria.')
     .min(0, 'La cantidad no puede ser negativa.'),
   medidas: yup.string().optional(),
+  codigoBarras: yup
+    .string()
+    .trim()
+    .max(64, 'El codigo de barras no puede superar 64 caracteres.')
+    .optional(),
   categoriaId: yup
     .number()
     .transform((value) => (isNaN(value) ? undefined : value))
@@ -80,6 +86,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         precio: initialData.precio,
         cantidadStock: initialData.cantidadStock,
         medidas: initialData.medidas,
+        codigoBarras: initialData.codigoBarras || '',
         categoriaId: initialData.categoria?.id ?? initialData.categoriaId,
         stockMinimo: initialData.stockMinimo ?? 0,
       });
@@ -91,6 +98,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         precio: undefined,
         cantidadStock: undefined,
         medidas: '',
+        codigoBarras: '',
         categoriaId: undefined,
         stockMinimo: undefined,
       });
@@ -145,6 +153,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         precio: data.precio,
         cantidadStock: data.cantidadStock,
         medidas: data.medidas,
+        codigoBarras: data.codigoBarras?.trim() || null,
         categoriaId: data.categoriaId,
         stockMinimo: data.stockMinimo ?? 0,
         imageUrl: finalImageUrl,
@@ -199,7 +208,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
         
         {/* Fila 1 */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className="block mb-1.5 text-sm font-semibold text-slate-700">Nombre del Producto *</label>
             <input
@@ -212,6 +221,21 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
               disabled={isSubmitting}
             />
             {errors.nombre && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.nombre.message}</p>}
+          </div>
+
+          <div>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Codigo de barras</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              {...register('codigoBarras')}
+              className={`w-full px-4 py-2.5 font-mono text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                errors.codigoBarras ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+              }`}
+              placeholder="Ej. 7791234567890"
+              disabled={isSubmitting}
+            />
+            {errors.codigoBarras && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.codigoBarras.message}</p>}
           </div>
 
           <div>

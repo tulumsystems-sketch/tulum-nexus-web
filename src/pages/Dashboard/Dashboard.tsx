@@ -370,8 +370,10 @@ export const Dashboard: React.FC = () => {
   const vendidoMP = Array.isArray(ventas) ? ventas.filter((v: any) => v.metodoPago !== 'EFECTIVO' && v.estado !== 'ANULADA').reduce((acc, v) => acc + (v.totalFinal || 0), 0) : 0;
   const totalEsperadoCaja = (caja?.montoInicial || 0) + vendidoEfectivo;
 
+  const productSearchTerm = productSearch.toLowerCase();
   const filteredProducts = Array.isArray(productos) ? productos.filter((p: any) =>
-    (p.nombre || '').toLowerCase().includes(productSearch.toLowerCase())
+    (p.nombre || '').toLowerCase().includes(productSearchTerm)
+    || (p.codigoBarras || '').toLowerCase().includes(productSearchTerm)
   ) : [];
   const totalProductos = Array.isArray(productos) ? productos.length : 0;
   const productosBajoStock = Array.isArray(productos)
@@ -709,7 +711,7 @@ export const Dashboard: React.FC = () => {
                       <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="Buscar por nombre de producto..."
+                        placeholder="Buscar por nombre o codigo de barras..."
                         value={productSearch}
                         onChange={(e) => setProductSearch(e.target.value)}
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm font-bold text-slate-700 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
@@ -729,6 +731,7 @@ export const Dashboard: React.FC = () => {
                           <tr>
                             <th className="px-6 py-4">Imagen</th>
                             <th className="px-6 py-4">Producto</th>
+                            <th className="px-6 py-4">Codigo</th>
                             <th className="px-6 py-4">Categoría</th>
                             <th className="px-6 py-4 text-right">Precio Base</th>
                             <th className="px-6 py-4 text-center">Stock</th>
@@ -750,6 +753,13 @@ export const Dashboard: React.FC = () => {
                                <td className="px-6 py-4">
                                  <div className="font-black text-slate-900">{col.nombre}</div>
                                  {col.medidas && <div className="mt-1 text-xs font-semibold text-slate-400">{col.medidas}</div>}
+                               </td>
+                               <td className="px-6 py-4">
+                                 {col.codigoBarras ? (
+                                   <span className="rounded-xl bg-slate-900 px-3 py-1.5 font-mono text-xs font-black text-white">{col.codigoBarras}</span>
+                                 ) : (
+                                   <span className="text-xs font-bold text-slate-300">Sin codigo</span>
+                                 )}
                                </td>
                                <td className="px-6 py-4 font-medium text-slate-500">
                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{col.categoria?.nombre || `ID: ${col.categoriaId}`}</span>
@@ -786,7 +796,7 @@ export const Dashboard: React.FC = () => {
                              </tr>
                           )) : (
                             <tr>
-                              <td colSpan={6} className="px-6 py-8">
+                              <td colSpan={7} className="px-6 py-8">
                                 <EmptyState compact title="No hay productos para mostrar" description="Crea un producto o ajusta la busqueda para ver resultados." icon={Package} />
                               </td>
                             </tr>

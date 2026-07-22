@@ -90,7 +90,9 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
   
   // Lógica de filtrado de productos
   const filteredProducts = Array.isArray(productos) ? productos.filter((p: any) => {
-    const matchesSearch = (p.nombre || "").toLowerCase().includes(searchTerm.toLowerCase());
+    const normalizedSearch = searchTerm.toLowerCase();
+    const matchesSearch = (p.nombre || "").toLowerCase().includes(normalizedSearch)
+      || (p.codigoBarras || "").toLowerCase().includes(normalizedSearch);
     const matchesCategory = selectedCategoryId === '' || p.categoriaId === Number(selectedCategoryId);
     return matchesSearch && matchesCategory;
   }) : [];
@@ -325,7 +327,7 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
                 type="text" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Ej. Tornillo, Servicio..."
+                placeholder="Ej. Tornillo, Servicio o codigo..."
                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm font-medium"
               />
             </div>
@@ -360,7 +362,7 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
                   </option>
                   {filteredProducts.map((p: any) => (
                     <option key={p.id} value={p.id}>
-                      {p.nombre} - ${p.precio} - Stock: {p.cantidadStock ?? 0}
+                      {p.nombre} {p.codigoBarras ? `(${p.codigoBarras})` : ''} - ${p.precio} - Stock: {p.cantidadStock ?? 0}
                     </option>
                   ))}
                 </select>

@@ -18,6 +18,7 @@ interface Producto {
   imageUrl?: string;
   cantidadStock: number;
   categoriaId: number;
+  codigoBarras?: string;
 }
 
 interface CartItem {
@@ -26,6 +27,8 @@ interface CartItem {
   precio: number;
   cantidad: number;
   imageUrl?: string;
+  cantidadStock: number;
+  codigoBarras?: string;
 }
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
@@ -52,6 +55,7 @@ export const POS: React.FC = () => {
     }
   }, [mpHabilitado, metodoPago]);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
   const [successVentaId, setSuccessVentaId] = useState<string | number | null>(null);
   const [vueltoFinal, setVueltoFinal] = useState<number>(0);
   const [currentVentaPrint, setCurrentVentaPrint] = useState<any>(null); // Guardar copia de la venta para imprimir
@@ -87,7 +91,9 @@ export const POS: React.FC = () => {
 
   const getProductStock = (productoId: number): number => {
     const prod = Array.isArray(productos) ? productos.find((p: any) => p.id === productoId) : null;
-    return prod ? prod.cantidadStock : 0;
+    if (prod) return Number(prod.cantidadStock || 0);
+    const cartItem = cart.find((i) => i.productoId === productoId);
+    return cartItem ? Number(cartItem.cantidadStock || 0) : 0;
   };
 
   const getCartQuantity = (productoId: number): number => {
@@ -96,8 +102,9 @@ export const POS: React.FC = () => {
   };
 
   const handleAddProduct = (p: Producto) => {
-    if (getCartQuantity(p.id) >= p.cantidadStock) {
-      setApiError(`No hay stock suficiente para "${p.nombre}". Disponible: ${p.cantidadStock}.`);
+    const stockDisponible = Number(p.cantidadStock || 0);
+    if (getCartQuantity(p.id) >= stockDisponible) {
+      setApiError(`No hay stock suficiente para "${p.nombre}". Disponible: ${stockDisponible}.`);
       return;
     }
     setApiError(null);
@@ -116,9 +123,38 @@ export const POS: React.FC = () => {
           precio: p.precio,
           cantidad: 1,
           imageUrl: p.imageUrl,
+          cantidadStock: stockDisponible,
+          codigoBarras: p.codigoBarras,
         },
       ];
     });
+  };
+
+  const handleBarcodeSubmit = async () => {
+    const codigoBarras = searchTerm.trim();
+    if (!codigoBarras) return;
+
+    setApiError(null);
+    setIsBarcodeLoading(true);
+    try {
+      const response = await apiClient.get(`/productos/codigo/${encodeURIComponent(codigoBarras)}`);
+      handleAddProduct(response.data);
+      setSearchTerm('');
+      window.setTimeout(() => searchInputRef.current?.focus(), 0);
+    } catch (err: any) {
+      const message = err.response?.status === 404
+        ? `No encontramos un producto con codigo ${codigoBarras}.`
+        : err.response?.data?.message || 'No pudimos leer el codigo de barras.';
+      setApiError(message);
+    } finally {
+      setIsBarcodeLoading(false);
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    handleBarcodeSubmit();
   };
 
   const handleUpdateQuantity = (id: number, qty: number) => {
@@ -285,11 +321,17 @@ export const POS: React.FC = () => {
               <input 
                 ref={searchInputRef}
                 type="text" 
-                placeholder="Buscar productos..."
+                placeholder="Buscar o escanear codigo de barras..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 md:pl-12 pr-4 py-2.5 md:py-3.5 rounded-2xl border border-white/10 focus:border-blue-300 outline-none transition-all text-sm font-bold bg-white/10 focus:bg-white focus:text-slate-900 placeholder:text-slate-400 shadow-inner"
+                onKeyDown={handleSearchKeyDown}
+                className="w-full pl-10 md:pl-12 pr-20 py-2.5 md:py-3.5 rounded-2xl border border-white/10 focus:border-blue-300 outline-none transition-all text-sm font-bold bg-white/10 focus:bg-white focus:text-slate-900 placeholder:text-slate-400 shadow-inner"
               />
+              {isBarcodeLoading && (
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase tracking-widest text-blue-300">
+                  Leyendo
+                </span>
+              )}
            </div>
            <div className="hidden lg:block rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-right">
              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total actual</div>
@@ -335,6 +377,9 @@ export const POS: React.FC = () => {
 
                       <div className="p-3 md:p-4 bg-white w-full border-t border-slate-100">
                           <h4 className="font-black text-xs md:text-sm text-slate-900 line-clamp-2 min-h-[2.25rem] group-hover:text-blue-600 transition-colors">{p.nombre}</h4>
+                          {p.codigoBarras && (
+                            <p className="mt-2 truncate font-mono text-[10px] font-bold text-slate-400">{p.codigoBarras}</p>
+                          )}
                           <div className="mt-3 flex items-end justify-between gap-2">
                             <p className="text-blue-600 font-black text-base md:text-lg">${Number(p.precio).toFixed(2)}</p>
                             <p className={`rounded-full px-2 py-1 text-[10px] font-black ${p.cantidadStock <= 0 ? 'bg-red-50 text-red-600' : p.cantidadStock <= 5 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{p.cantidadStock} disp.</p>
@@ -344,10 +389,10 @@ export const POS: React.FC = () => {
                  ))}
               </div>
            ) : (
-              <div className="flex h-full flex-col items-center justify-center text-center text-slate-400">
+                 <div className="flex h-full flex-col items-center justify-center text-center text-slate-400">
                  <ShoppingBag className="mb-3 h-12 w-12 text-slate-200" />
                  <div className="font-bold text-slate-600">No encontramos productos</div>
-                 <div className="mt-1 text-sm font-medium">Proba con otra busqueda o revisa el catalogo.</div>
+                 <div className="mt-1 text-sm font-medium">Proba con otra busqueda o escanea un codigo cargado.</div>
               </div>
            )}
          </div>
