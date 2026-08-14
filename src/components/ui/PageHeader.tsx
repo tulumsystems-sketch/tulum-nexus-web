@@ -18,8 +18,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   action,
   meta,
 }) => (
-  <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 px-6 py-6 text-white shadow-xl shadow-slate-200 sm:px-8">
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.35),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.25),transparent_28%)]" />
+  <section className="relative overflow-hidden rounded-3xl border border-slate-800 bg-[linear-gradient(135deg,#020617_0%,#0f172a_48%,#111827_100%)] px-6 py-6 text-white shadow-2xl shadow-black/35 sm:px-8">
+    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400" />
+    <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:32px_32px] opacity-35" />
     <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-start gap-4">
         {Icon && (

@@ -29,13 +29,13 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   const classes = toneClasses[tone];
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/80 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-200">
+    <div className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/25 transition-all hover:-translate-y-0.5 hover:border-slate-700 hover:shadow-2xl hover:shadow-black/35">
       <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${classes.line}`} />
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
-          <div className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</div>
-          {helper && <p className="mt-2 text-sm font-medium text-slate-500">{helper}</p>}
+          <div className="mt-3 text-3xl font-black tracking-tight text-slate-50">{value}</div>
+          {helper && <p className="mt-2 text-sm font-medium text-slate-400">{helper}</p>}
         </div>
         <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border ${classes.icon}`}>
           <Icon className="h-6 w-6" />
