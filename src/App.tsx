@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard/Dashboard';
 import { ProtectedRoute } from './components/ProtectedRoute/ProtectedRoute';
 import { LaunchAnnouncement } from './components/LaunchAnnouncement';
 import { POS } from './pages/POS/POS';
+import { SuperAdminPanel } from './pages/SuperAdmin/SuperAdminPanel';
 
 const App: React.FC = () => {
   return (
@@ -20,6 +21,15 @@ const App: React.FC = () => {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requiredRol="SUPER_ADMIN">
+              <SuperAdminPanel />
             </ProtectedRoute>
           }
         />
