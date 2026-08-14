@@ -75,7 +75,7 @@ export const Login: React.FC = () => {
 
       // Pequeño delay para que localStorage se propague antes del redirect
       await new Promise(resolve => setTimeout(resolve, 100));
-      navigate('/dashboard');
+      navigate(rol === 'SUPER_ADMIN' ? '/admin' : '/dashboard');
     } catch (error: any) {
 
       // Guard Clause: Manejo explicito de la falta de red/servidor caído
