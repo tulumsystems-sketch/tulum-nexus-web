@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { Building2, LogOut, RefreshCw, ShieldCheck, Plus, X, Users, Power, KeyRound, Mail, UserCheck } from 'lucide-react';
+import { Building2, LogOut, RefreshCw, ShieldCheck, Plus, X, Users, Power, Mail, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/axiosConfig';
 import { AppButton } from '../../components/ui/AppButton';
