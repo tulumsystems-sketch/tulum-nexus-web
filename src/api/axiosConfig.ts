@@ -19,6 +19,7 @@ apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return config;
+
     config.headers.Authorization = `Bearer ${token}`;
     const tenant = localStorage.getItem('tenant');
     if (tenant) config.headers['X-Tenant-ID'] = tenant;
@@ -29,7 +30,7 @@ apiClient.interceptors.request.use(
 
 apiClient.interceptors.response.use(
   (response: AxiosResponse): AxiosResponse => response,
-  (error: AxiosError): Promise<never> => {
+  (error: AxiosError): Promise<any> => {
     if (!error.response) return Promise.reject(error);
     const statusCode = error.response.status;
     const isUnauthorized = statusCode === 401 || statusCode === 403;

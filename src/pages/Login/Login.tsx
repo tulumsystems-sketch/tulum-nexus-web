@@ -43,65 +43,28 @@ export const Login: React.FC = () => {
    * Manejador central del submit
    */
   const onSubmit: SubmitHandler<LoginFormInputs> = async (data) => {
-    // Limpiamos errores previos (Happy path configuration)
     setApiError(null);
-
     try {
-      // Petición POST al endpoint de autenticación Multi-Tenant
-      // Pasamos el header X-Tenant-ID manualmente porque aún no está en localStorage
       const response = await apiClient.post('/auth/login', {
-        email: data.email,
+        tenant: data.tenant.trim(),
+        email: data.email.trim(),
         password: data.password,
-        tenant: data.tenant,
-      }, {
-        headers: {
-          'X-Tenant-ID': data.tenant
-        }
       });
 
-      const token = response.data?.token;
-      const rol = response.data?.rol;
-      const email = response.data?.email;
-
-      if (!token || typeof token !== 'string') {
-        setApiError('Respuesta inesperada del servidor.');
-        return;
-      }
+      const { token, rol, tenant, email } = response.data;
 
       localStorage.setItem('token', token);
-      localStorage.setItem('tenant', data.tenant);
-      localStorage.setItem('rol', rol || 'OPERADOR');
-      localStorage.setItem('email', email || '');
+      localStorage.setItem('tenant', tenant);
+      localStorage.setItem('rol', rol);
+      localStorage.setItem('email', email);
 
-      // Pequeño delay para que localStorage se propague antes del redirect
-      await new Promise(resolve => setTimeout(resolve, 100));
       navigate(rol === 'SUPER_ADMIN' ? '/admin' : '/dashboard');
-    } catch (error: any) {
-
-      // Guard Clause: Manejo explicito de la falta de red/servidor caído
-      if (!error.response) {
-        setApiError('No pudimos conectar con el servidor. Revisa que el backend este activo.');
-        return;
-      }
-
-      // Guard Clause: Manejo de HTTP 401 Credenciales Inválidas
-      if (error.response.status === 401) {
-        setApiError('Credenciales incorrectas. Revisa email, password y tenant.');
-        return;
-      }
-
-      // Guard Clause: Manejo de HTTP 404 No Encontrado
-      if (error.response.status === 404) {
-        setApiError('No encontramos el servicio de autenticacion.');
-        return;
-      }
-
-      // Extracción del mensaje o un error por defecto
-      const errorMessage =
-        error.response.data?.message ||
-        'Ocurrió un error al intentar iniciar sesión.';
-
-      setApiError(errorMessage);
+    } catch (err: any) {
+      const errorMsg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        'Credenciales incorrectas o error de conexión con el servidor.';
+      setApiError(errorMsg);
     }
   };
 
