@@ -860,10 +860,10 @@ export const Dashboard: React.FC = () => {
                          <tr key={col.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                            <td className="px-6 py-4 font-mono text-slate-400">{col.id}</td>
                            <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
-                               {col.nombre.charAt(0)}{col.apellido.charAt(0)}
-                             </div>
-                             {col.nombre} {col.apellido}
+                              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                                {(col.nombre ? col.nombre.charAt(0) : 'C')}{(col.apellido ? col.apellido.charAt(0) : '')}
+                              </div>
+                              {col.nombre || 'Sin Nombre'} {col.apellido || ''}
                            </td>
                            <td className="px-6 py-4 font-medium text-slate-500">
                              {col.empresa ? (
