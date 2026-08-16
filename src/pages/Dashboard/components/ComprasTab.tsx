@@ -47,8 +47,15 @@ export const ComprasTab: React.FC = () => {
   const proveedorList = Array.isArray(proveedores) ? proveedores : [];
   const productoList = Array.isArray(productos) ? productos : [];
 
-  // Referenciamos sugerenciaList para que TypeScript/ESLint no arroje error de variable no usada
-  void sugerenciaList;
+  const handleCargarSugerencia = (sug: any) => {
+    setItems(current => {
+      if (current.length === 1 && current[0].productoId === '') {
+        return [{ productoId: sug.productoId, cantidad: sug.cantidadSugerida, precioUnitario: sug.precioEstimado }];
+      }
+      return [...current, { productoId: sug.productoId, cantidad: sug.cantidadSugerida, precioUnitario: sug.precioEstimado }];
+    });
+    setFeedback({ type: 'success', message: `¡Añadido "${sug.nombreProducto}" (${sug.cantidadSugerida} unds) al formulario de compra!` });
+  };
 
   const resetForm = () => {
     setProveedorId('');
@@ -140,6 +147,44 @@ export const ComprasTab: React.FC = () => {
       />
 
       {feedback && <ErrorAlert type={feedback.type} message={feedback.message} />}
+
+      {/* Sugerencias Automáticas de Compra por Faltantes de Remitos y Stock Mínimo */}
+      {sugerenciaList.length > 0 && (
+        <section className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50/60 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-black text-amber-900 flex items-center gap-2">
+              🚨 Sugerencia de Compras (Faltantes para Entregas y Stock Mínimo)
+            </h3>
+            <span className="bg-amber-200 text-amber-800 text-xs font-black px-2.5 py-1 rounded-full">
+              {sugerenciaList.length} ítems sugeridos
+            </span>
+          </div>
+          <p className="text-xs text-amber-700 mb-4 font-medium">
+            El sistema calculó automáticamente los faltantes cruzando la demanda de tus hojas de ruta pendientes y tu stock mínimo. Hacé clic en "Cargar" para sumarlo a tu orden.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {sugerenciaList.map((sug: any) => (
+              <div key={sug.productoId} className="bg-white border border-amber-200 rounded-xl p-4 flex items-center justify-between shadow-sm">
+                <div>
+                  <h4 className="font-black text-slate-800 text-sm">{sug.nombreProducto}</h4>
+                  <div className="text-xs text-slate-500 space-y-0.5 mt-1">
+                    <div>Stock Actual: <span className="font-bold text-slate-700">{sug.stockActual}</span> | Mín: {sug.stockMinimo}</div>
+                    <div>Demanda Remitos: <span className="font-bold text-blue-600">{sug.demandaRemitos}</span></div>
+                    <div className="text-amber-800 font-black">Faltante Sugerido: {sug.cantidadSugerida} unds.</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCargarSugerencia(sug)}
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow transition-all whitespace-nowrap"
+                >
+                  Cargar
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
