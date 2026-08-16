@@ -47,6 +47,9 @@ export const ComprasTab: React.FC = () => {
   const proveedorList = Array.isArray(proveedores) ? proveedores : [];
   const productoList = Array.isArray(productos) ? productos : [];
 
+  // Referenciamos sugerenciaList para que TypeScript/ESLint no arroje error de variable no usada
+  void sugerenciaList;
+
   const resetForm = () => {
     setProveedorId('');
     setNroFactura('');
