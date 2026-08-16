@@ -31,6 +31,7 @@ const emptyItem = (): CompraItemForm => ({ productoId: '', cantidad: 1, precioUn
 
 export const ComprasTab: React.FC = () => {
   const { data: compras, error, isLoading, mutate } = useSWR('/compras', fetcher);
+  const { data: sugerencias } = useSWR('/compras/sugerencias', fetcher);
   const { data: proveedores } = useSWR('/proveedores', fetcher);
   const { data: productos } = useSWR('/productos', fetcher);
 
