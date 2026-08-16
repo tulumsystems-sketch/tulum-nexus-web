@@ -12,6 +12,9 @@ export interface ClientFormInputs {
   nombre: string;
   apellido: string;
   empresa?: string;
+  telefono?: string;
+  direccion?: string;
+  googleMapsUrl?: string;
 }
 
 /**
@@ -21,6 +24,9 @@ const clientSchema: yup.ObjectSchema<ClientFormInputs> = yup.object().shape({
   nombre: yup.string().required('El nombre es obligatorio.'),
   apellido: yup.string().required('El apellido es obligatorio.'),
   empresa: yup.string().optional(),
+  telefono: yup.string().optional(),
+  direccion: yup.string().optional(),
+  googleMapsUrl: yup.string().url('Debe ser un link URL válido de Google Maps').optional().nullable(),
 }) as yup.ObjectSchema<ClientFormInputs>;
 
 export const CreateClientForm: React.FC<CreateClientProps> = ({ onClientCreated }) => {
@@ -39,11 +45,13 @@ export const CreateClientForm: React.FC<CreateClientProps> = ({ onClientCreated 
     setApiError(null);
 
     try {
-      // POST sin enviar el tenantId
       await apiClient.post('/clientes', {
         nombre: data.nombre,
         apellido: data.apellido,
         empresa: data.empresa,
+        telefono: data.telefono,
+        direccion: data.direccion,
+        googleMapsUrl: data.googleMapsUrl,
       });
 
       // Limpia el formulario
@@ -120,6 +128,45 @@ export const CreateClientForm: React.FC<CreateClientProps> = ({ onClientCreated 
               disabled={isSubmitting}
             />
             {errors.empresa && <p className="mt-1 text-xs font-medium text-red-500">{errors.empresa.message}</p>}
+          </div>
+
+          {/* Teléfono */}
+          <div>
+            <label className="block mb-1 text-sm font-medium text-gray-700">Teléfono</label>
+            <input
+              type="text"
+              {...register('telefono')}
+              className="w-full px-4 py-2 text-gray-700 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Ej. 1122334455"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Dirección */}
+          <div>
+            <label className="block mb-1 text-sm font-medium text-gray-700">Dirección</label>
+            <input
+              type="text"
+              {...register('direccion')}
+              className="w-full px-4 py-2 text-gray-700 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Ej. Av. San Martín 1200"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Google Maps Link */}
+          <div>
+            <label className="block mb-1 text-sm font-medium text-gray-700">Link Google Maps (Ubicación)</label>
+            <input
+              type="url"
+              {...register('googleMapsUrl')}
+              className={`w-full px-4 py-2 text-gray-700 border rounded focus:outline-none focus:ring-2 ${
+                errors.googleMapsUrl ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+              }`}
+              placeholder="https://maps.app.goo.gl/..."
+              disabled={isSubmitting}
+            />
+            {errors.googleMapsUrl && <p className="mt-1 text-xs font-medium text-red-500">{errors.googleMapsUrl.message}</p>}
           </div>
         </div>
 
