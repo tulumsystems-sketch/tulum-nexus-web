@@ -17,6 +17,13 @@ interface RemitoItem {
   descripcion: string;
 }
 
+interface ProductoOption {
+  id: number;
+  nombre: string;
+  precio?: number;
+  cantidadStock?: number;
+}
+
 interface RemitoFormInputs {
   clienteId: number | string;
   direccionEntrega: string;
@@ -40,8 +47,11 @@ interface Remito {
     id: number;
     cantidad: number;
     descripcion: string;
-    producto?: { nombre: string };
+    precioUnitario?: number;
+    totalLinea?: number;
+    producto?: { nombre: string; precio?: number };
   }>;
+  total?: number;
 }
 
 export const RemitosTab: React.FC = () => {
@@ -61,6 +71,21 @@ export const RemitosTab: React.FC = () => {
   });
 
   const selectedClienteId = watch('clienteId');
+  const watchedItems = watch('items');
+
+  const formatMoney = (value: number | null | undefined) =>
+    `$${Number(value || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const getSelectedProducto = (productoId: number | string) => {
+    if (!Array.isArray(productos) || productoId === '') return null;
+    return productos.find((p: ProductoOption) => String(p.id) === String(productoId)) || null;
+  };
+
+  const getItemPrecio = (item?: RemitoItem) => Number(item ? getSelectedProducto(item.productoId)?.precio || 0 : 0);
+  const getItemSubtotal = (item?: RemitoItem) => getItemPrecio(item) * Number(item?.cantidad || 0);
+  const remitoPreviewTotal = Array.isArray(watchedItems)
+    ? watchedItems.reduce((acc, item) => acc + getItemSubtotal(item), 0)
+    : 0;
 
   React.useEffect(() => {
     if (selectedClienteId && Array.isArray(clientes)) {
@@ -225,8 +250,8 @@ export const RemitosTab: React.FC = () => {
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
                     >
                       <option value="">Seleccionar...</option>
-                      {productos?.map((p: any) => (
-                        <option key={p.id} value={p.id}>{p.nombre} - Stock: {p.cantidadStock ?? 0}</option>
+                      {productos?.map((p: ProductoOption) => (
+                        <option key={p.id} value={p.id}>{p.nombre} - {formatMoney(p.precio)} - Stock: {p.cantidadStock ?? 0}</option>
                       ))}
                     </select>
                   </div>
@@ -238,13 +263,25 @@ export const RemitosTab: React.FC = () => {
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
                     />
                   </div>
-                  <div className="md:col-span-5">
+                  <div className="md:col-span-3">
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Variedad</label>
                     <input
                       {...register(`items.${index}.descripcion` as const)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
                       placeholder="Ej: Color azul, talle L..."
                     />
+                  </div>
+                  <div className="md:col-span-1">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Precio</label>
+                    <div className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-right text-xs font-black text-slate-700">
+                      {formatMoney(getItemPrecio(watchedItems?.[index]))}
+                    </div>
+                  </div>
+                  <div className="md:col-span-1">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Total</label>
+                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-2 text-right text-xs font-black text-emerald-700">
+                      {formatMoney(getItemSubtotal(watchedItems?.[index]))}
+                    </div>
                   </div>
                   <div className="md:col-span-1">
                     <button
@@ -258,6 +295,12 @@ export const RemitosTab: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="flex justify-end">
+              <div className="rounded-2xl border border-slate-200 bg-slate-900 px-5 py-4 text-right shadow-lg shadow-slate-200">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total del remito</div>
+                <div className="mt-1 text-2xl font-black text-white">{formatMoney(remitoPreviewTotal)}</div>
+              </div>
             </div>
           </div>
 
@@ -308,8 +351,11 @@ export const RemitosTab: React.FC = () => {
                       {r.estado.replace('_', ' ')}
                     </span>
                   </div>
-                  <div className="text-right text-[10px] font-bold text-slate-400 uppercase">
-                    {new Date(r.fecha).toLocaleDateString('es-AR')}
+                  <div className="text-right">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">
+                      {new Date(r.fecha).toLocaleDateString('es-AR')}
+                    </div>
+                    <div className="mt-1 text-lg font-black text-slate-900">{formatMoney(r.total)}</div>
                   </div>
                 </div>
 
@@ -336,9 +382,20 @@ export const RemitosTab: React.FC = () => {
                   <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Ítems:</p>
                   <ul className="space-y-1 text-xs">
                     {r.items.map(item => (
-                      <li key={item.id} className="text-slate-600 font-medium">
-                        <span className="font-black text-slate-800 mr-1">{item.cantidad}x</span>
-                        {item.producto?.nombre || 'Producto'} <span className="text-[10px] italic text-slate-400">{item.descripcion}</span>
+                      <li key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-slate-600">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-800">
+                              <span className="font-black mr-1">{item.cantidad}x</span>
+                              {item.producto?.nombre || 'Producto'}
+                            </div>
+                            {item.descripcion && <div className="text-[10px] italic text-slate-400 truncate">{item.descripcion}</div>}
+                          </div>
+                          <div className="text-right tabular-nums">
+                            <div className="text-[10px] font-bold text-slate-400">{formatMoney(item.precioUnitario)} c/u</div>
+                            <div className="font-black text-emerald-700">{formatMoney(item.totalLinea)}</div>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>
