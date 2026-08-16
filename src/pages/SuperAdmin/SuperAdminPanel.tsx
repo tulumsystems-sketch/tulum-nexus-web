@@ -36,6 +36,7 @@ export const SuperAdminPanel: React.FC = () => {
   const tenants = useMemo(() => (Array.isArray(data) ? data : []), [data]);
   const [selectedTenantId, setSelectedTenantId] = useState('');
   const [savingFeature, setSavingFeature] = useState<string | null>(null);
+  const [savingModule, setSavingModule] = useState<string | null>(null);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -51,6 +52,14 @@ export const SuperAdminPanel: React.FC = () => {
 
   const effectiveTenantId = selectedTenantId || tenants[0]?.tenantId || '';
   const selectedTenant = tenants.find((tenant) => tenant.tenantId === effectiveTenantId) || null;
+
+  const {
+    data: tenantConfigData,
+    mutate: mutateTenantConfig,
+  } = useSWR<any>(
+    effectiveTenantId ? `/admin/tenants/${effectiveTenantId}/config` : null,
+    fetcher,
+  );
 
   const {
     data: featureData,
@@ -83,8 +92,34 @@ export const SuperAdminPanel: React.FC = () => {
 
   const refresh = async () => {
     await mutate();
+    await mutateTenantConfig();
     await mutateFeatures();
     await mutateUsers();
+  };
+
+  const toggleTenantModule = async (moduleKey: string, currentValue: boolean) => {
+    if (!effectiveTenantId || !tenantConfigData) return;
+    setSavingModule(moduleKey);
+    setFeedback(null);
+    try {
+      const updatedConfig = {
+        ...tenantConfigData,
+        [moduleKey]: !currentValue,
+      };
+      await apiClient.put(`/admin/tenants/${effectiveTenantId}/config`, updatedConfig);
+      await mutateTenantConfig();
+      setFeedback({
+        type: 'success',
+        message: `Módulo ${moduleKey} ${!currentValue ? 'habilitado' : 'deshabilitado'} para ${effectiveTenantId}.`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.response?.data?.message || 'No pudimos actualizar el módulo.',
+      });
+    } finally {
+      setSavingModule(null);
+    }
   };
 
   const toggleTenantStatus = async () => {
@@ -295,37 +330,120 @@ export const SuperAdminPanel: React.FC = () => {
               {/* Módulos y Feature Flags */}
               <div className="rounded-2xl border border-slate-800 bg-slate-900 shadow-xl shadow-black/25 p-6">
                 <div className="mb-4 text-xs font-black uppercase tracking-wide text-slate-400">
-                  Módulos y Funcionalidades
+                  Módulos y Funcionalidades Activas
                 </div>
 
-                {isLoadingFeatures ? (
-                  <LoadingState label="Cargando features..." />
-                ) : featureError ? (
-                  <ErrorAlert message="No pudimos cargar las features del tenant." />
-                ) : (
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <div className="text-sm font-black text-white">Lector de Código de Barras (POS_BARCODE)</div>
-                        <p className="mt-1 text-sm font-medium text-slate-400">
-                          Habilita la búsqueda y escaneo rápido de productos por código de barras en el POS.
-                        </p>
-                      </div>
-                      <label className="flex cursor-pointer items-center gap-3">
-                        <span className="text-sm font-bold text-slate-300">
-                          {posBarcode?.enabled ? 'Habilitado' : 'Deshabilitado'}
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(posBarcode?.enabled)}
-                          onChange={togglePosBarcode}
-                          disabled={!posBarcode || savingFeature === 'POS_BARCODE'}
-                          className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
-                        />
-                      </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Módulo Clientes */}
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-black text-white">Módulo Clientes & Preventistas</div>
+                      <p className="mt-0.5 text-xs font-medium text-slate-400">
+                        Directorio de clientes, cuentas corrientes y geolocalización Maps.
+                      </p>
                     </div>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <span className="text-xs font-bold text-slate-300">
+                        {tenantConfigData?.clientesHabilitado ? 'Activo' : 'Inactivo'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(tenantConfigData?.clientesHabilitado ?? true)}
+                        onChange={() => toggleTenantModule('clientesHabilitado', Boolean(tenantConfigData?.clientesHabilitado ?? true))}
+                        disabled={savingModule === 'clientesHabilitado'}
+                        className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                      />
+                    </label>
                   </div>
-                )}
+
+                  {/* Módulo Remitos */}
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-black text-white">Módulo Hojas de Ruta & Remitos</div>
+                      <p className="mt-0.5 text-xs font-medium text-slate-400">
+                        Despachos, viajes e indicaciones de reparto logístico.
+                      </p>
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <span className="text-xs font-bold text-slate-300">
+                        {tenantConfigData?.remitosHabilitado ? 'Activo' : 'Inactivo'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(tenantConfigData?.remitosHabilitado ?? true)}
+                        onChange={() => toggleTenantModule('remitosHabilitado', Boolean(tenantConfigData?.remitosHabilitado ?? true))}
+                        disabled={savingModule === 'remitosHabilitado'}
+                        className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Módulo Compras */}
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-black text-white">Módulo Compras & Proveedores</div>
+                      <p className="mt-0.5 text-xs font-medium text-slate-400">
+                        Órdenes de compra a proveedores e ingresos de mercadería.
+                      </p>
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <span className="text-xs font-bold text-slate-300">
+                        {tenantConfigData?.comprasHabilitado ? 'Activo' : 'Inactivo'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(tenantConfigData?.comprasHabilitado ?? true)}
+                        onChange={() => toggleTenantModule('comprasHabilitado', Boolean(tenantConfigData?.comprasHabilitado ?? true))}
+                        disabled={savingModule === 'comprasHabilitado'}
+                        className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Módulo Stock */}
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-black text-white">Módulo Stock & Movimientos</div>
+                      <p className="mt-0.5 text-xs font-medium text-slate-400">
+                        Kardex de movimientos y trazabilidad del inventario.
+                      </p>
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <span className="text-xs font-bold text-slate-300">
+                        {tenantConfigData?.stockHabilitado ? 'Activo' : 'Inactivo'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(tenantConfigData?.stockHabilitado ?? true)}
+                        onChange={() => toggleTenantModule('stockHabilitado', Boolean(tenantConfigData?.stockHabilitado ?? true))}
+                        disabled={savingModule === 'stockHabilitado'}
+                        className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Feature: Barcode */}
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 flex items-center justify-between md:col-span-2">
+                    <div>
+                      <div className="text-sm font-black text-white">Lector de Código de Barras (POS_BARCODE)</div>
+                      <p className="mt-0.5 text-xs font-medium text-slate-400">
+                        Búsqueda y escaneo rápido con lector de códigos de barra en el POS.
+                      </p>
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <span className="text-xs font-bold text-slate-300">
+                        {posBarcode?.enabled ? 'Activo' : 'Inactivo'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(posBarcode?.enabled)}
+                        onChange={togglePosBarcode}
+                        disabled={!posBarcode || savingFeature === 'POS_BARCODE'}
+                        className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
 
               {/* Usuarios del Tenant */}
