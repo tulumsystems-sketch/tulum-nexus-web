@@ -307,6 +307,16 @@ export const RemitosTab: React.FC = () => {
                     {r.direccionEntrega}
                   </p>
                   {r.telefonoDestinatario && <p className="text-xs font-medium text-slate-400">Móvil: {r.telefonoDestinatario}</p>}
+                  {(r as any).cliente?.googleMapsUrl && (
+                    <a
+                      href={(r as any).cliente.googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 mt-1 transition-colors"
+                    >
+                      🗺️ Ver Ubicación Google Maps
+                    </a>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-slate-50">
