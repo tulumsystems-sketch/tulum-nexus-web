@@ -63,8 +63,6 @@ export const SuperAdminPanel: React.FC = () => {
 
   const {
     data: featureData,
-    error: featureError,
-    isLoading: isLoadingFeatures,
     mutate: mutateFeatures,
   } = useSWR<TenantFeature[]>(
     effectiveTenantId ? `/superadmin/tenants/${effectiveTenantId}/features` : null,

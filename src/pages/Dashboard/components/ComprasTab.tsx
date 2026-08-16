@@ -43,6 +43,7 @@ export const ComprasTab: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const compraList: Compra[] = Array.isArray(compras) ? compras : [];
+  const sugerenciaList: any[] = Array.isArray(sugerencias) ? sugerencias : [];
   const proveedorList = Array.isArray(proveedores) ? proveedores : [];
   const productoList = Array.isArray(productos) ? productos : [];
 
