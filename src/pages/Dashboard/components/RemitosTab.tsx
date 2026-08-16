@@ -54,11 +54,24 @@ export const RemitosTab: React.FC = () => {
   const { data: productos } = useSWR('/productos', fetcher);
   const { data: remitos, mutate: mutateRemitos } = useSWR('/remitos', fetcher);
 
-  const { register, control, handleSubmit, reset } = useForm<RemitoFormInputs>({
+  const { register, control, handleSubmit, reset, watch, setValue } = useForm<RemitoFormInputs>({
     defaultValues: {
       items: [{ productoId: '', cantidad: 1, descripcion: '' }]
     }
   });
+
+  const selectedClienteId = watch('clienteId');
+
+  React.useEffect(() => {
+    if (selectedClienteId && Array.isArray(clientes)) {
+      const cli = clientes.find((c: any) => String(c.id) === String(selectedClienteId));
+      if (cli) {
+        if (cli.direccion) setValue('direccionEntrega', cli.direccion);
+        if (cli.nombre || cli.apellido) setValue('nombreDestinatario', `${cli.nombre || ''} ${cli.apellido || ''}`.trim());
+        if (cli.telefono) setValue('telefonoDestinatario', cli.telefono);
+      }
+    }
+  }, [selectedClienteId, clientes, setValue]);
 
   const { fields, append, remove } = useFieldArray({
     control,
