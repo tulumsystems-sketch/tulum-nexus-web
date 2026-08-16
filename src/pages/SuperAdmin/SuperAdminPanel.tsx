@@ -11,6 +11,13 @@ import { clearTenantFeaturesCache } from '../../hooks/useTenantFeatures';
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
+const getRoleLabel = (rol: string) => {
+  if (rol === 'OPERADOR') return 'Preventista';
+  if (rol === 'ADMIN') return 'Administrador';
+  if (rol === 'SUPER_ADMIN') return 'Super Admin';
+  return rol;
+};
+
 interface TenantConfig {
   id?: number;
   tenantId: string;
@@ -484,7 +491,7 @@ export const SuperAdminPanel: React.FC = () => {
                                   ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
                                   : 'bg-slate-800 text-slate-400'
                               }`}>
-                                {u.rol}
+                                {getRoleLabel(u.rol)}
                               </span>
                             </td>
                           </tr>

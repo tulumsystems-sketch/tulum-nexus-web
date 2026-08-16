@@ -7,6 +7,12 @@ import apiClient from '../../../api/axiosConfig';
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
+const getRoleLabel = (rol: string) => {
+  if (rol === 'OPERADOR') return 'Preventista';
+  if (rol === 'ADMIN') return 'Administrador';
+  return rol;
+};
+
 interface Usuario {
   id: number;
   email: string;
@@ -150,8 +156,8 @@ export const UsuariosTab: React.FC = () => {
               className={`w-full px-4 py-2.5 text-sm font-semibold transition-all border rounded-xl text-slate-700 bg-slate-50/50 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white ${errors.rol ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200'
                 }`}
             >
-              <option value="OPERADOR">OPERADOR</option>
-              <option value="ADMIN">ADMIN</option>
+              <option value="OPERADOR">Preventista</option>
+              <option value="ADMIN">Administrador</option>
             </select>
             {errors.rol && <p className="mt-1 text-xs text-red-500">{errors.rol.message}</p>}
           </div>
@@ -199,7 +205,7 @@ export const UsuariosTab: React.FC = () => {
                             : 'bg-slate-100 text-slate-600 border-slate-200'
                           }`}
                       >
-                        {usuario.rol}
+                        {getRoleLabel(usuario.rol)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
