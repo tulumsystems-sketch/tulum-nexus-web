@@ -68,7 +68,7 @@ interface Remito {
   saldoPendiente?: number;
 }
 
-export const RemitosTab: React.FC = () => {
+export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCobranzas = false }) => {
   const [vista, setVista] = useState<VistaRemitos>('operacion');
   const [activeFilter, setActiveFilter] = useState<RemitoStatus | 'TODOS'>('TODOS');
   const [isSubmittingRemito, setIsSubmittingRemito] = useState(false);
@@ -118,6 +118,10 @@ export const RemitosTab: React.FC = () => {
     control,
     name: "items"
   });
+
+  React.useEffect(() => {
+    if (ocultarCobranzas) setVista('operacion');
+  }, [ocultarCobranzas]);
 
   const onSubmit: SubmitHandler<RemitoFormInputs> = async (data) => {
     setIsSubmittingRemito(true);
@@ -202,17 +206,19 @@ export const RemitosTab: React.FC = () => {
         meta={
           <div className="flex flex-wrap gap-2">
             <StatusPill label={`${remitosList.length} remitos`} tone="blue" />
-            <StatusPill
-              label={`${formatMoney(totalPorCobrar)} por cobrar`}
-              tone={totalPorCobrar > 0 ? 'amber' : 'emerald'}
-            />
+            {!ocultarCobranzas && (
+              <StatusPill
+                label={`${formatMoney(totalPorCobrar)} por cobrar`}
+                tone={totalPorCobrar > 0 ? 'amber' : 'emerald'}
+              />
+            )}
           </div>
         }
       />
 
       {feedback && <ErrorAlert type={feedback.type} message={feedback.message} />}
 
-      {/* SELECTOR DE VISTA: OPERACIÓN LOGÍSTICA O COBRANZAS */}
+      {!ocultarCobranzas && (
       <div className="flex w-full max-w-md p-1 bg-slate-100 rounded-xl border border-slate-200">
         {([
           { key: 'operacion', label: 'Remitos y entregas' },
@@ -231,8 +237,9 @@ export const RemitosTab: React.FC = () => {
           </button>
         ))}
       </div>
+      )}
 
-      {vista === 'cobranzas' ? (
+      {!ocultarCobranzas && vista === 'cobranzas' ? (
         <CobranzasPanel remitos={remitosList} onRemitosActualizados={mutateRemitos} />
       ) : (
         <>
@@ -418,9 +425,11 @@ export const RemitosTab: React.FC = () => {
                       <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded-lg border ${getStatusStyles(r.estado)}`}>
                         {r.estado.replace('_', ' ')}
                       </span>
+                      {!ocultarCobranzas && (
                       <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded-lg border ${estadoPagoStyles[getEstadoPago(r)]}`}>
                         {estadoPagoLabel[getEstadoPago(r)]}
                       </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
@@ -428,7 +437,7 @@ export const RemitosTab: React.FC = () => {
                       {new Date(r.fecha).toLocaleDateString('es-AR')}
                     </div>
                     <div className="mt-1 text-lg font-black text-slate-900">{formatMoney(r.total)}</div>
-                    {getSaldoPendiente(r) > 0 && (
+                    {!ocultarCobranzas && getSaldoPendiente(r) > 0 && (
                       <div className="text-[10px] font-black uppercase text-red-500">
                         Saldo {formatMoney(getSaldoPendiente(r))}
                       </div>

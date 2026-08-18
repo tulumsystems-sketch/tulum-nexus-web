@@ -84,10 +84,10 @@ export const Dashboard: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<any>(null);
 
   // SWR Asíncrono puro - Solo disparar si hay token para evitar loops de 401/403
-  const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token ? '/categorias' : null, fetcher);
+  const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token && !esPreventista ? '/categorias' : null, fetcher);
   const { data: productos, error: errorProductos, isLoading: isLoadingProductos, mutate: mutateProductos } = useSWR(token ? '/productos' : null, fetcher);
   const { data: clientes, error: errorClientes, isLoading: isLoadingClientes, mutate: mutateClientes } = useSWR(token ? '/clientes' : null, fetcher);
-  const { data: ventas, error: errorVentas, isLoading: isLoadingVentas, mutate: mutateVentas } = useSWR(token ? '/ventas' : null, fetcher);
+  const { data: ventas, error: errorVentas, isLoading: isLoadingVentas, mutate: mutateVentas } = useSWR(token && !esPreventista ? '/ventas' : null, fetcher);
   
   // Configuración Global y Preferencias
   const { data: globalConfig } = useSWR(token ? '/config' : null, fetcher, {
@@ -104,7 +104,7 @@ export const Dashboard: React.FC = () => {
   const [page, setPage] = useState(0);
 
   const { data: ventasPaginadas } = useSWR(
-    token ? `/ventas/search?page=${page}&size=10&desde=${filterDesde}&hasta=${filterHasta}&metodoPago=${filterMetodoPago}&estado=${filterEstado}` : null,
+    token && !esPreventista ? `/ventas/search?page=${page}&size=10&desde=${filterDesde}&hasta=${filterHasta}&metodoPago=${filterMetodoPago}&estado=${filterEstado}` : null,
     fetcher
   );
 
@@ -358,6 +358,9 @@ export const Dashboard: React.FC = () => {
       : 'Caja cerrada - abri un turno para operar en efectivo';
 
   const handleTabChange = (tab: TabType) => {
+    if (esPreventista && tab !== 'products' && tab !== 'clients' && tab !== 'remitos') {
+      return;
+    }
     setActiveTab(tab);
     setSidebarOpen(false);
   };
@@ -405,7 +408,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Navbar */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {!isOperador && (
+          {!esPreventista && !isOperador && (
           <button
             onClick={() => handleTabChange('dashboard')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -443,6 +446,7 @@ export const Dashboard: React.FC = () => {
             Productos
           </button>
           
+          {!esPreventista && (
           <button
             onClick={() => handleTabChange('categories')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -454,6 +458,7 @@ export const Dashboard: React.FC = () => {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
             Categorías
           </button>
+          )}
           
           {(globalConfig?.clientesHabilitado ?? true) && (
             <button
@@ -486,7 +491,7 @@ export const Dashboard: React.FC = () => {
             </button>
           )}
 
-          {!isOperador && (
+          {esAdmin && (
           <button
             onClick={() => handleTabChange('sales')}
             className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
@@ -514,7 +519,7 @@ export const Dashboard: React.FC = () => {
             </button>
           )}
 
-          {!isOperador && (
+          {esAdmin && (
             <div className="pt-2 border-t border-white/5 space-y-2">
               {(globalConfig?.comprasHabilitado ?? true) && (
                 <>
@@ -666,14 +671,14 @@ export const Dashboard: React.FC = () => {
                   <div className="flex flex-wrap gap-2">
                     <StatusPill label={`${totalProductos} productos`} tone="blue" />
                     <StatusPill label={`${productosBajoStock} bajo stock`} tone={productosBajoStock > 0 ? 'amber' : 'emerald'} />
-                    {productosSinCosto > 0 && (
+                    {productosSinCosto > 0 && !esPreventista && (
                       <StatusPill label={`${productosSinCosto} sin costo cargado`} tone="amber" />
                     )}
                   </div>
                 }
-                action={<AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Nuevo producto</AppButton>}
+                action={!esPreventista ? <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Nuevo producto</AppButton> : undefined}
               />
-              {showProductForm || editingProduct ? (
+              {!esPreventista && (showProductForm || editingProduct) ? (
                 <div className="relative">
                   <button
                     onClick={() => { setShowProductForm(false); setEditingProduct(null); }}
@@ -701,7 +706,9 @@ export const Dashboard: React.FC = () => {
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm font-bold text-slate-700 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                       />
                     </div>
-                    <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Agregar producto</AppButton>
+                    {!esPreventista && (
+                      <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Agregar producto</AppButton>
+                    )}
                   </div>
 
                   <SectionCard
@@ -718,7 +725,7 @@ export const Dashboard: React.FC = () => {
                             <th className="px-6 py-4">Categoría</th>
                             <th className="px-6 py-4 text-right">Precio / Costo</th>
                             <th className="px-6 py-4 text-center">Stock</th>
-                            <th className="px-6 py-4 text-center">Acciones</th>
+                            {!esPreventista && <th className="px-6 py-4 text-center">Acciones</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -742,14 +749,14 @@ export const Dashboard: React.FC = () => {
                                </td>
                                <td className="px-6 py-4 text-right">
                                  <div className="font-black text-slate-900">${Number(col.precio).toFixed(2)}</div>
-                                 {col.precioCosto != null ? (
+                                 {!esPreventista && (col.precioCosto != null ? (
                                    <div className="mt-0.5 text-xs font-semibold text-slate-400">Costo ${Number(col.precioCosto).toFixed(2)}</div>
                                  ) : (
                                    <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 border border-amber-200">
                                      <AlertTriangle className="h-3 w-3" />
                                      Sin costo
                                    </div>
-                                 )}
+                                 ))}
                                </td>
                                 <td className="px-6 py-4 text-center">
                                   <StatusPill
@@ -757,6 +764,7 @@ export const Dashboard: React.FC = () => {
                                     tone={col.cantidadStock <= 0 ? 'red' : col.stockMinimo > 0 && col.cantidadStock <= col.stockMinimo ? 'amber' : 'emerald'}
                                   />
                                 </td>
+                               {!esPreventista && (
                                <td className="px-6 py-4 text-center">
                                  <div className="flex items-center justify-center gap-2">
                                    <button
@@ -779,10 +787,11 @@ export const Dashboard: React.FC = () => {
                                    </button>
                                  </div>
                                </td>
+                               )}
                              </tr>
                           )) : (
                             <tr>
-                              <td colSpan={6} className="px-6 py-8">
+                              <td colSpan={esPreventista ? 5 : 6} className="px-6 py-8">
                                 <EmptyState compact title="No hay productos para mostrar" description="Crea un producto o ajusta la busqueda para ver resultados." icon={Package} />
                               </td>
                             </tr>
@@ -797,7 +806,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* TAB: CATEGORÍAS */}
-          {activeTab === 'categories' && (
+          {activeTab === 'categories' && !esPreventista && (
             <div className="max-w-5xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <CreateCategoryForm
                 onCategoryCreated={handleCategoryCreated}
@@ -922,7 +931,7 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'usuarios' && <UsuariosTab />}
 
           {/* TAB: REMITOS */}
-          {activeTab === 'remitos' && <RemitosTab />}
+          {activeTab === 'remitos' && <RemitosTab ocultarCobranzas={esPreventista} />}
 
           {/* TAB: PROVEEDORES */}
           {activeTab === 'proveedores' && <ProveedoresTab />}
@@ -937,7 +946,7 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'auditoria' && <AuditoriaTab />}
 
           {/* TAB: DASHBOARD */}
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && !esPreventista && (
             <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PageHeader
                 eyebrow="Operacion en tiempo real"
@@ -1125,7 +1134,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* TAB: VENTAS HISTORIAL */}
-          {activeTab === 'sales' && (
+          {activeTab === 'sales' && !esPreventista && (
             <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                
                {/* Barra de Filtros */}
