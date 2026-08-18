@@ -67,7 +67,7 @@ export const Dashboard: React.FC = () => {
   const esPreventista = rol === 'PREVENTISTA';
   const puedeUsarPOS = !esPreventista;
 
-  const [activeTab, setActiveTab] = useState<TabType>(isOperador ? 'products' : 'dashboard');
+  const [activeTab, setActiveTab] = useState<TabType>(isOperador ? 'products' : esPreventista ? 'remitos' : 'dashboard');
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [montoInicial, setMontoInicial] = useState<number | ''>('');
   const [isOpeningCaja, setIsOpeningCaja] = useState(false);
@@ -113,18 +113,19 @@ export const Dashboard: React.FC = () => {
   const [isLoadingCaja, setIsLoadingCaja] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      apiClient.get('/caja/estado')
-        .then(res => setCaja(res.data))
-        .catch(err => {
-          console.error("Error obteniendo estado de caja:", err);
-          setCaja(null);
-        })
-        .finally(() => setIsLoadingCaja(false));
-    } else {
+    if (!token || esPreventista) {
+      setCaja(null);
       setIsLoadingCaja(false);
+      return;
     }
-  }, [token]);
+    apiClient.get('/caja/estado')
+      .then(res => setCaja(res.data))
+      .catch(err => {
+        console.error("Error obteniendo estado de caja:", err);
+        setCaja(null);
+      })
+      .finally(() => setIsLoadingCaja(false));
+  }, [token, esPreventista]);
 
   // Historial de Cierres de Caja (solo carga cuando el modal está abierto)
   const { data: historialCajas } = useSWR(
@@ -350,9 +351,11 @@ export const Dashboard: React.FC = () => {
     : [];
   const totalCompradoCliente = ventasDelCliente.reduce((acc: number, venta: any) => acc + Number(venta.totalFinal || 0), 0);
   const cajaAbierta = caja?.estado === 'ABIERTA';
-  const cajaStatusMeta = cajaAbierta
-    ? `Caja abierta - efectivo esperado $${totalEsperadoCaja.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : 'Caja cerrada - abri un turno para operar en efectivo';
+  const cajaStatusMeta = esPreventista
+    ? 'Preventista - pedidos y remitos, sin caja ni POS'
+    : cajaAbierta
+      ? `Caja abierta - efectivo esperado $${totalEsperadoCaja.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : 'Caja cerrada - abri un turno para operar en efectivo';
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -585,7 +588,7 @@ export const Dashboard: React.FC = () => {
 
 
         <div className="p-6 border-t border-white/5 space-y-3">
-          {caja && caja.estado === 'ABIERTA' ? (
+          {puedeUsarPOS && (caja && caja.estado === 'ABIERTA' ? (
             <button
               onClick={() => setIsClosingModalOpen(true)}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-amber-500 transition-colors bg-amber-500/10 rounded-xl hover:bg-amber-500 hover:text-white"
@@ -601,7 +604,7 @@ export const Dashboard: React.FC = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
               Abrir Turno
             </button>
-          )}
+          ))}
           {esAdmin && (
             <button
               onClick={() => setIsHistorialCajasOpen(true)}
@@ -943,13 +946,15 @@ export const Dashboard: React.FC = () => {
                 icon={BarChart3}
                 meta={
                   <div className="flex flex-wrap gap-2">
-                    <StatusPill label={cajaAbierta ? 'Caja abierta' : 'Caja cerrada'} tone={cajaAbierta ? 'emerald' : 'amber'} />
+                    {!esPreventista && (
+                      <StatusPill label={cajaAbierta ? 'Caja abierta' : 'Caja cerrada'} tone={cajaAbierta ? 'emerald' : 'amber'} />
+                    )}
                     <StatusPill label={`${totalProductos} productos`} tone="blue" />
                     <StatusPill label={`${productosBajoStock} alertas stock`} tone={productosBajoStock > 0 ? 'amber' : 'emerald'} />
                   </div>
                 }
                 action={
-                  cajaAbierta ? (
+                  esPreventista ? undefined : cajaAbierta ? (
                     <AppButton variant="secondary" onClick={() => setIsClosingModalOpen(true)}>Cerrar caja</AppButton>
                   ) : (
                     <AppButton variant="success" onClick={() => setIsAperturaModalOpen(true)}>Abrir caja</AppButton>
