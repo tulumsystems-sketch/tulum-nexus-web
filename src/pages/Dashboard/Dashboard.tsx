@@ -11,6 +11,7 @@ import {
   Eye,
   MapPin,
   Package,
+  Pencil,
   Phone,
   Plus,
   Receipt,
@@ -41,6 +42,13 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { SectionCard } from '../../components/ui/SectionCard';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { clearTenantFeaturesCache } from '../../hooks/useTenantFeatures';
+import {
+  getMetodoPagoLabelCorto,
+  getMetodosPagoHabilitados,
+  puedeCobrarConMercadoPago,
+} from '../../utils/tenantConfig';
+import { getSufijoUnidad, getUnidadDeProducto } from '../../utils/unidadMedida';
+import { imprimirTicket } from '../../utils/ticketTemplate';
 
 
 
@@ -55,6 +63,9 @@ export const Dashboard: React.FC = () => {
   const rol = localStorage.getItem('rol');
   const esAdmin = rol === 'ADMIN';
   const isOperador = rol === 'OPERADOR';
+  // El preventista toma pedidos y remitos en la calle: no cobra en el mostrador.
+  const esPreventista = rol === 'PREVENTISTA';
+  const puedeUsarPOS = !esPreventista;
 
   const [activeTab, setActiveTab] = useState<TabType>(isOperador ? 'products' : 'dashboard');
   const [editingProduct, setEditingProduct] = useState<any>(null);
@@ -70,6 +81,7 @@ export const Dashboard: React.FC = () => {
   const [productSearch, setProductSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [editingCategory, setEditingCategory] = useState<any>(null);
 
   // SWR Asíncrono puro - Solo disparar si hay token para evitar loops de 401/403
   const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token ? '/categorias' : null, fetcher);
@@ -78,8 +90,11 @@ export const Dashboard: React.FC = () => {
   const { data: ventas, error: errorVentas, isLoading: isLoadingVentas, mutate: mutateVentas } = useSWR(token ? '/ventas' : null, fetcher);
   
   // Configuración Global y Preferencias
-  const { data: globalConfig } = useSWR(token ? '/config' : null, fetcher);
-  const mpHabilitado = globalConfig?.mpAceptarCredito || globalConfig?.mpAceptarDebito;
+  const { data: globalConfig } = useSWR(token ? '/config' : null, fetcher, {
+    revalidateOnFocus: false,
+  });
+  const mpHabilitado = puedeCobrarConMercadoPago(globalConfig);
+  const metodosHabilitados = getMetodosPagoHabilitados(globalConfig);
   
   // Filtros Pestaña de Ventas
   const [filterDesde, setFilterDesde] = useState('');
@@ -131,7 +146,11 @@ export const Dashboard: React.FC = () => {
     navigate('/login', { replace: true });
   };
 
-  const handleCategoryCreated = async () => await mutateCategorias();
+  const handleCategoryCreated = async () => {
+    await mutateCategorias();
+    setEditingCategory(null);
+    notify('success', 'Categoría guardada correctamente.');
+  };
   const handleProductCreated = async () => {
     await mutateProductos();
     notify('success', 'Producto guardado correctamente.');
@@ -157,7 +176,7 @@ export const Dashboard: React.FC = () => {
 
   const handleCobrar = async (ventaId: number) => {
     // Validación preventiva: verificar si existe el token de Mercado Pago
-    if (!globalConfig?.mpAccessToken) {
+    if (!globalConfig?.mpConfigurado) {
       notify('error', 'Mercado Pago no esta configurado. Revisa credenciales en Configuracion antes de cobrar con link.');
       setActiveTab('settings');
       return;
@@ -189,97 +208,7 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleImprimir = (venta: any) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const itemsHtml = venta.items?.map((item: any) => `
-      <tr>
-        <td style="padding: 5px 0;">${item.cantidad} x ${item.producto?.nombre || 'Producto'}</td>
-        <td style="text-align: right;">$${(item.precioUnitario * item.cantidad).toFixed(2)}</td>
-      </tr>
-    `).join('') || '';
-
-    const clienteName = venta.cliente ? `${venta.cliente.nombre} ${venta.cliente.apellido}` : 'Consumidor Final';
-    const fecha = new Date(venta.fecha || Date.now()).toLocaleString('es-AR');
-
-    const htmlContent = `
-      <html>
-        <head>
-          <title>Ticket #BT-${venta.nroComprobante || venta.id}</title>
-          <style>
-            body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0 auto; color: #000; font-size: 12px; }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .header { margin-bottom: 20px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
-            .logo { max-width: 60mm; height: auto; margin-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-            .totals { border-top: 1px dashed #000; padding-top: 10px; }
-            .footer { margin-top: 20px; text-align: center; font-size: 10px; border-top: 1px dashed #000; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
-          <div class="header center">
-            ${globalConfig?.logoUrl ? `<img src="${globalConfig.logoUrl}" class="logo" />` : ''}
-            <div class="bold" style="font-size: 16px;">${globalConfig?.nombreEmpresa || 'TULUM SYSTEMS'}</div>
-            <div>COMPROBANTE NO FISCAL</div>
-          </div>
-          
-          <div>
-            <div class="bold">TICKET: #BT-${venta.nroComprobante || venta.id}</div>
-            <div>FECHA: ${fecha}</div>
-            <div>CLIENTE: ${clienteName}</div>
-          </div>
-
-          <table>
-            <thead>
-              <tr style="border-bottom: 1px solid #000;">
-                <th style="text-align: left;">DESCRIPCIÓN</th>
-                <th style="text-align: right;">TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-
-          <div class="totals">
-            <div style="display: flex; justify-content: space-between;">
-              <span>SUBTOTAL:</span>
-              <span>$${(venta.totalFinal / 1.21).toFixed(2)}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span>IVA (21%):</span>
-              <span>$${(venta.totalFinal - (venta.totalFinal / 1.21)).toFixed(2)}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;" class="bold">
-              <span>TOTAL:</span>
-              <span>$${(venta.totalFinal || 0).toFixed(2)}</span>
-            </div>
-          </div>
-
-          <div style="margin-top: 10px; font-size: 10px;">
-            <div>FORMA DE PAGO: ${venta.metodoPago || 'MERCADO PAGO'}</div>
-            ${venta.montoAbonado ? `<div>ABONADO: $${venta.montoAbonado.toFixed(2)}</div>` : ''}
-            ${venta.montoAbonado ? `<div class="bold">VUELTO: $${(venta.montoAbonado - venta.totalFinal).toFixed(2)}</div>` : ''}
-          </div>
-
-          <div class="footer">
-            <p>¡Gracias por su compra!</p>
-            <p>SaaS POS - Powered by Tulum Systems</p>
-          </div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 500);
-  };
+  const handleImprimir = (venta: any) => imprimirTicket(venta, globalConfig);
 
   const handleOpenCaja = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -377,9 +306,19 @@ export const Dashboard: React.FC = () => {
   const ingresosTotales = Array.isArray(ventas) ? ventas.reduce((acc: number, v: any) => acc + (v.totalFinal || 0), 0) : 0;
   const ticketPromedio = totalVentas > 0 ? ingresosTotales / totalVentas : 0;
 
-  const vendidoEfectivo = Array.isArray(ventas) ? ventas.filter((v: any) => v.metodoPago === 'EFECTIVO' && v.estado !== 'ANULADA').reduce((acc, v) => acc + (v.totalFinal || 0), 0) : 0;
-  const vendidoMP = Array.isArray(ventas) ? ventas.filter((v: any) => v.metodoPago !== 'EFECTIVO' && v.estado !== 'ANULADA').reduce((acc, v) => acc + (v.totalFinal || 0), 0) : 0;
-  const totalEsperadoCaja = (caja?.montoInicial || 0) + vendidoEfectivo;
+  // Cada método de pago se acumula por separado: sólo el efectivo entra al cajón.
+  const vendidoPorMetodo = (metodoPago: string) => Array.isArray(ventas)
+    ? ventas
+        .filter((v: any) => (v.metodoPago || 'EFECTIVO') === metodoPago && v.estado !== 'ANULADA')
+        .reduce((acc: number, v: any) => acc + (v.totalFinal || 0), 0)
+    : 0;
+
+  const vendidoEfectivo = vendidoPorMetodo('EFECTIVO');
+  const vendidoTransferencia = vendidoPorMetodo('TRANSFERENCIA');
+  const vendidoMP = vendidoPorMetodo('MERCADO_PAGO');
+  const cobranzasEfectivo = caja?.montoCobranzasEfectivo || 0;
+  const cobranzasTransferencia = caja?.montoCobranzasTransferencia || 0;
+  const totalEsperadoCaja = (caja?.montoInicial || 0) + vendidoEfectivo + cobranzasEfectivo;
 
   const filteredProducts = Array.isArray(productos) ? productos.filter((p: any) =>
     (p.nombre || '').toLowerCase().includes(productSearch.toLowerCase())
@@ -387,6 +326,9 @@ export const Dashboard: React.FC = () => {
   const totalProductos = Array.isArray(productos) ? productos.length : 0;
   const productosBajoStock = Array.isArray(productos)
     ? productos.filter((p: any) => Number(p.cantidadStock || 0) <= Number(p.stockMinimo || 0)).length
+    : 0;
+  const productosSinCosto = Array.isArray(productos)
+    ? productos.filter((p: any) => p.precioCosto == null).length
     : 0;
   const formatMoney = (value: number | null | undefined) =>
     `$${Number(value || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -400,6 +342,13 @@ export const Dashboard: React.FC = () => {
       .sort((a: any, b: any) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime())[0] || null;
   };
   const selectedClientLastSale = selectedClient ? getUltimaCompraCliente(selectedClient) : null;
+  const ventasDelCliente = selectedClient && Array.isArray(ventas)
+    ? ventas.filter((venta: any) =>
+        String(venta.cliente?.id || venta.clienteId || '') === String(selectedClient.id) &&
+        venta.estado !== 'ANULADA'
+      )
+    : [];
+  const totalCompradoCliente = ventasDelCliente.reduce((acc: number, venta: any) => acc + Number(venta.totalFinal || 0), 0);
   const cajaAbierta = caja?.estado === 'ABIERTA';
   const cajaStatusMeta = cajaAbierta
     ? `Caja abierta - efectivo esperado $${totalEsperadoCaja.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -447,7 +396,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="font-semibold text-slate-200 truncate flex items-center gap-2">
             <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            {esAdmin ? 'Administrador' : 'Preventista'}
+            {esAdmin ? 'Administrador' : esPreventista ? 'Preventista' : 'Operador'}
           </div>
         </div>
 
@@ -468,6 +417,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* Acceso Directo Punto de Venta POS */}
+          {puedeUsarPOS && (
           <button
             onClick={() => { setSidebarOpen(false); navigate('/pos'); }}
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-black bg-emerald-600 text-white shadow-lg shadow-emerald-500/10 hover:bg-emerald-700 transition-all duration-200 hover:-translate-y-0.5"
@@ -475,6 +425,7 @@ export const Dashboard: React.FC = () => {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             Punto de Venta (POS)
           </button>
+          )}
 
           <button
 
@@ -712,6 +663,9 @@ export const Dashboard: React.FC = () => {
                   <div className="flex flex-wrap gap-2">
                     <StatusPill label={`${totalProductos} productos`} tone="blue" />
                     <StatusPill label={`${productosBajoStock} bajo stock`} tone={productosBajoStock > 0 ? 'amber' : 'emerald'} />
+                    {productosSinCosto > 0 && (
+                      <StatusPill label={`${productosSinCosto} sin costo cargado`} tone="amber" />
+                    )}
                   </div>
                 }
                 action={<AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Nuevo producto</AppButton>}
@@ -759,7 +713,7 @@ export const Dashboard: React.FC = () => {
                             <th className="px-6 py-4">Imagen</th>
                             <th className="px-6 py-4">Producto</th>
                             <th className="px-6 py-4">Categoría</th>
-                            <th className="px-6 py-4 text-right">Precio Base</th>
+                            <th className="px-6 py-4 text-right">Precio / Costo</th>
                             <th className="px-6 py-4 text-center">Stock</th>
                             <th className="px-6 py-4 text-center">Acciones</th>
                           </tr>
@@ -783,10 +737,20 @@ export const Dashboard: React.FC = () => {
                                <td className="px-6 py-4 font-medium text-slate-500">
                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{col.categoria?.nombre || `ID: ${col.categoriaId}`}</span>
                                </td>
-                               <td className="px-6 py-4 font-black text-slate-900 text-right">${Number(col.precio).toFixed(2)}</td>
+                               <td className="px-6 py-4 text-right">
+                                 <div className="font-black text-slate-900">${Number(col.precio).toFixed(2)}</div>
+                                 {col.precioCosto != null ? (
+                                   <div className="mt-0.5 text-xs font-semibold text-slate-400">Costo ${Number(col.precioCosto).toFixed(2)}</div>
+                                 ) : (
+                                   <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 border border-amber-200">
+                                     <AlertTriangle className="h-3 w-3" />
+                                     Sin costo
+                                   </div>
+                                 )}
+                               </td>
                                 <td className="px-6 py-4 text-center">
                                   <StatusPill
-                                    label={`${col.cantidadStock} unds.`}
+                                    label={`${col.cantidadStock} ${getSufijoUnidad(getUnidadDeProducto(col))}`}
                                     tone={col.cantidadStock <= 0 ? 'red' : col.stockMinimo > 0 && col.cantidadStock <= col.stockMinimo ? 'amber' : 'emerald'}
                                   />
                                 </td>
@@ -832,7 +796,11 @@ export const Dashboard: React.FC = () => {
           {/* TAB: CATEGORÍAS */}
           {activeTab === 'categories' && (
             <div className="max-w-5xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <CreateCategoryForm onCategoryCreated={handleCategoryCreated} />
+              <CreateCategoryForm
+                onCategoryCreated={handleCategoryCreated}
+                initialData={editingCategory}
+                onCancelEdit={() => setEditingCategory(null)}
+              />
               
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
@@ -844,18 +812,37 @@ export const Dashboard: React.FC = () => {
                       <tr>
                         <th className="px-6 py-4">ID</th>
                         <th className="px-6 py-4">Nombre / Tag</th>
+                        <th className="px-6 py-4">Unidad de Medida</th>
+                        <th className="px-6 py-4 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {Array.isArray(categorias) && categorias.length > 0 ? categorias.map((col: any, index: number) => (
-                         <tr key={col.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                         <tr key={col.id} className={`transition-colors hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} ${editingCategory?.id === col.id ? 'bg-indigo-50/70' : ''}`}>
                            <td className="px-6 py-4 font-mono text-slate-400">{col.id}</td>
                            <td className="px-6 py-4 font-semibold text-slate-700">
                              <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-md border border-indigo-100">{col.nombre}</span>
                            </td>
+                           <td className="px-6 py-4 font-semibold text-slate-500">
+                             {col.unidadMedida || 'UNIDAD'}
+                             <span className="ml-1.5 text-xs text-slate-400">({getSufijoUnidad(col.unidadMedida)})</span>
+                           </td>
+                           <td className="px-6 py-4 text-right">
+                             <button
+                               type="button"
+                               onClick={() => {
+                                 setEditingCategory(col);
+                                 window.scrollTo({ top: 0, behavior: 'smooth' });
+                               }}
+                               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                             >
+                               <Pencil className="h-3.5 w-3.5" />
+                               Editar
+                             </button>
+                           </td>
                          </tr>
                       )) : (
-                        <tr><td colSpan={2} className="px-6 py-8 text-center text-slate-400 italic">No hay categorías registradas.</td></tr>
+                        <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400 italic">No hay categorías registradas.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -1150,8 +1137,9 @@ export const Dashboard: React.FC = () => {
                     <label className="block text-xs font-extrabold text-slate-500 mb-1 tracking-wider uppercase">Medio de Pago</label>
                     <select value={filterMetodoPago} onChange={(e) => { setFilterMetodoPago(e.target.value); setPage(0); }} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none transition-all text-sm bg-slate-50/50">
                        <option value="">TODOS</option>
-                       <option value="EFECTIVO">EFECTIVO</option>
-                       <option value="MERCADO_PAGO">MERCADO PAGO</option>
+                       {metodosHabilitados.map((metodo) => (
+                         <option key={metodo.value} value={metodo.value}>{metodo.label.toUpperCase()}</option>
+                       ))}
                     </select>
                  </div>
                  <div className="flex-1 min-w-[120px] sm:min-w-[150px]">
@@ -1189,7 +1177,7 @@ export const Dashboard: React.FC = () => {
                              <tr key={col.id} className="hover:bg-slate-50 transition-all duration-200">
                                 <td className="px-6 py-4 font-mono font-bold text-indigo-600">{col.nroComprobante || col.id}</td>
                                 <td className="px-6 py-4 font-bold text-slate-700">{col.cliente ? `${col.cliente.nombre} ${col.cliente.apellido}` : 'Consumidor Final'}</td>
-                                <td className="px-6 py-4 text-center font-bold text-slate-400 text-xs">{col.metodoPago === 'MERCADO_PAGO' ? 'Digital' : 'Efectivo'}</td>
+                                <td className="px-6 py-4 text-center font-bold text-slate-400 text-xs">{getMetodoPagoLabelCorto(col.metodoPago)}</td>
                                 <td className="px-6 py-4 text-center">
                                   <span className={`px-3 py-1 text-xs font-bold rounded-full border ${
                                     col.estado === 'PENDIENTE' ? 'bg-amber-50 text-amber-600 border-amber-200' :
@@ -1229,6 +1217,114 @@ export const Dashboard: React.FC = () => {
 
         </div>
       </main>
+
+      {selectedClient && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onClick={() => setSelectedClient(null)}>
+          <div
+            className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50 px-6 py-5">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-lg font-black text-indigo-700">
+                  {(selectedClient.nombre ? selectedClient.nombre.charAt(0) : 'C')}{(selectedClient.apellido ? selectedClient.apellido.charAt(0) : '')}
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider text-slate-400">Perfil de cliente</p>
+                  <h2 className="text-2xl font-black text-slate-900">
+                    {selectedClient.nombre || 'Sin nombre'} {selectedClient.apellido || ''}
+                  </h2>
+                  {selectedClient.empresa && (
+                    <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500">
+                      <Building2 className="h-4 w-4" />
+                      {selectedClient.empresa}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedClient(null)}
+                className="rounded-xl p-2 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                aria-label="Cerrar perfil"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Compras</p>
+                  <p className="mt-1 text-xl font-black text-slate-800">{ventasDelCliente.length}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Total comprado</p>
+                  <p className="mt-1 text-xl font-black text-slate-800">{formatMoney(totalCompradoCliente)}</p>
+                </div>
+              </div>
+
+              {Number(selectedClient.saldoCuentaCorriente || 0) !== 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-amber-600">Saldo cuenta corriente</p>
+                  <p className="mt-1 text-lg font-black text-amber-800">{formatMoney(selectedClient.saldoCuentaCorriente)}</p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 text-sm">
+                  <Phone className="mt-0.5 h-4 w-4 text-slate-400" />
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Teléfono</p>
+                    <p className="font-semibold text-slate-700">{selectedClient.telefono || 'No informado'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 text-sm">
+                  <MapPin className="mt-0.5 h-4 w-4 text-slate-400" />
+                  <div className="flex-1">
+                    <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Dirección</p>
+                    <p className="font-semibold text-slate-700">{selectedClient.direccion || 'No informada'}</p>
+                    {selectedClient.googleMapsUrl && (
+                      <a
+                        href={selectedClient.googleMapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-xs font-black text-indigo-600 hover:underline"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Abrir en Google Maps
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Última compra</p>
+                {selectedClientLastSale ? (
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-black text-slate-800">
+                        {selectedClientLastSale.nroComprobante || `#${selectedClientLastSale.id}`}
+                      </p>
+                      <p className="text-xs font-semibold text-slate-500">
+                        {selectedClientLastSale.fecha
+                          ? new Date(selectedClientLastSale.fecha).toLocaleDateString('es-AR')
+                          : 'Sin fecha'}
+                        {' · '}
+                        {getMetodoPagoLabelCorto(selectedClientLastSale.metodoPago)}
+                      </p>
+                    </div>
+                    <p className="font-black text-slate-900">{formatMoney(selectedClientLastSale.totalFinal)}</p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm font-semibold text-slate-400">Todavía no tiene compras registradas.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Bloqueo de Caja - Solo preventista necesita turno abierto */}
       {!isLoadingCaja && isOperador && (!caja || caja.estado !== 'ABIERTA') && (
@@ -1306,6 +1402,24 @@ export const Dashboard: React.FC = () => {
                 <span className="text-sm font-bold opacity-80">Vendido en Efectivo:</span>
                 <span className="font-mono font-bold">${vendidoEfectivo.toFixed(2)}</span>
               </div>
+              {cobranzasEfectivo > 0 && (
+                <div className="flex justify-between items-center text-amber-600">
+                  <span className="text-sm font-bold opacity-80">Cobranzas de remitos en efectivo:</span>
+                  <span className="font-mono font-bold">${cobranzasEfectivo.toFixed(2)}</span>
+                </div>
+              )}
+              {vendidoTransferencia > 0 && (
+                <div className="flex justify-between items-center text-indigo-600">
+                  <span className="text-sm font-bold opacity-80">Vendido por Transferencia:</span>
+                  <span className="font-mono font-bold">${vendidoTransferencia.toFixed(2)}</span>
+                </div>
+              )}
+              {cobranzasTransferencia > 0 && (
+                <div className="flex justify-between items-center text-indigo-500">
+                  <span className="text-sm font-bold opacity-80">Cobranzas de remitos por transferencia:</span>
+                  <span className="font-mono font-bold">${cobranzasTransferencia.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center text-blue-600">
                 <span className="text-sm font-bold opacity-80">Vendido en Digital (MP):</span>
                 <span className="font-mono font-bold">${vendidoMP.toFixed(2)}</span>
@@ -1314,6 +1428,9 @@ export const Dashboard: React.FC = () => {
                 <span className="text-sm font-black uppercase tracking-wider">Total Esperado en Caja:</span>
                 <span className="font-mono font-black text-lg">${totalEsperadoCaja.toFixed(2)}</span>
               </div>
+              <p className="text-xs font-semibold text-slate-400">
+                Transferencias y Mercado Pago no entran al efectivo del cajón.
+              </p>
             </div>
 
             <form onSubmit={handleCloseCaja} className="space-y-6">
@@ -1389,9 +1506,10 @@ export const Dashboard: React.FC = () => {
                         {c.fechaCierre ? ` → ${new Date(c.fechaCierre).toLocaleString()}` : ''}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
                       <div><span className="font-bold text-slate-400 block">Inicial</span><span className="font-black text-slate-700">${(c.montoInicial || 0).toFixed(2)}</span></div>
                       <div><span className="font-bold text-emerald-500 block">Efectivo</span><span className="font-black text-slate-700">${(c.montoVentasEfectivo || 0).toFixed(2)}</span></div>
+                      <div><span className="font-bold text-indigo-500 block">Transferencia</span><span className="font-black text-slate-700">${(c.montoVentasTransferencia || 0).toFixed(2)}</span></div>
                       <div><span className="font-bold text-blue-500 block">MP</span><span className="font-black text-slate-700">${(c.montoVentasMP || 0).toFixed(2)}</span></div>
                       <div><span className="font-bold text-amber-500 block">Esperado</span><span className="font-black text-slate-700">${(c.montoFinalEsperado || 0).toFixed(2)}</span></div>
                       {c.montoFinalReal != null && (

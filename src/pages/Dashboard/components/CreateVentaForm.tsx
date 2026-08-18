@@ -5,6 +5,14 @@ import * as yup from 'yup';
 import useSWR from 'swr';
 import apiClient from '../../../api/axiosConfig';
 import { CreateClientForm } from './CreateClientForm';
+import {
+  MetodoPago,
+  calcularTotales,
+  discriminaIva,
+  getAliasCobro,
+  getMetodosPagoHabilitados,
+  puedeCobrarConMercadoPago,
+} from '../../../utils/tenantConfig';
 
 export interface CreateVentaProps {
   onVentaCreated: () => void;
@@ -13,7 +21,7 @@ export interface CreateVentaProps {
 export interface VentaFormInputs {
   clienteId: number | null;
   observaciones?: string;
-  metodoPago: 'MERCADO_PAGO' | 'EFECTIVO';
+  metodoPago: MetodoPago;
   montoAbonado?: number;
 }
 
@@ -35,7 +43,7 @@ const ventaSchema: yup.ObjectSchema<VentaFormInputs> = yup.object().shape({
     .transform((value) => (isNaN(value) || value === 0 ? null : value))
     .default(null),
   observaciones: yup.string().optional(),
-  metodoPago: yup.string().oneOf(['MERCADO_PAGO', 'EFECTIVO']).required().default('EFECTIVO'),
+  metodoPago: yup.string().oneOf(['MERCADO_PAGO', 'TRANSFERENCIA', 'EFECTIVO']).required().default('EFECTIVO'),
   montoAbonado: yup.number().transform((value) => (isNaN(value) ? undefined : value)).optional(),
 }) as yup.ObjectSchema<VentaFormInputs>;
 
@@ -57,7 +65,9 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
   const { data: categorias } = useSWR('/categorias', fetcher);
   const { data: globalConfig } = useSWR('/config', fetcher);
 
-  const mpHabilitado = globalConfig?.mpAceptarCredito || globalConfig?.mpAceptarDebito;
+  const metodosHabilitados = getMetodosPagoHabilitados(globalConfig);
+  const mpHabilitado = puedeCobrarConMercadoPago(globalConfig);
+  const aliasCobro = getAliasCobro(globalConfig);
 
   const {
     register,
@@ -71,19 +81,21 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
     defaultValues: { clienteId: null, metodoPago: 'EFECTIVO', montoAbonado: 0 },
   });
 
-  React.useEffect(() => {
-    if (globalConfig) {
-      setValue('metodoPago', (mpHabilitado ? 'MERCADO_PAGO' : 'EFECTIVO') as 'EFECTIVO' | 'MERCADO_PAGO');
-    }
-  }, [globalConfig]);
-
   const [metodoPago, montoAbonado] = watch(['metodoPago', 'montoAbonado']);
   const esEfectivo = metodoPago === 'EFECTIVO';
 
+  // Si el método seleccionado no está habilitado para el tenant, caemos al primero disponible.
+  React.useEffect(() => {
+    if (globalConfig && !metodosHabilitados.some((m) => m.value === metodoPago)) {
+      setValue('metodoPago', metodosHabilitados[0].value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalConfig, metodoPago]);
+
   const itemsActuales = items || [];
   const subtotalNeto = itemsActuales.reduce((acc, item) => acc + (Number(item.precio || 0) * Number(item.cantidad || 0)), 0);
-  const calculoIva = subtotalNeto * 0.21;
-  const totalVenta = subtotalNeto + calculoIva;
+  const { ivaPorcentaje, iva: calculoIva, total: totalVenta } = calcularTotales(subtotalNeto, globalConfig);
+  const muestraIva = discriminaIva(globalConfig);
 
   const pagado = Number(montoAbonado || 0);
   const vueltoDisplay = pagado > 0 ? Math.max(0, pagado - totalVenta).toFixed(2) : '0.00';
@@ -448,23 +460,31 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
           <div className="space-y-6">
             <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
               <label className="block text-sm font-bold text-slate-800 uppercase tracking-wide mb-4">Método de Pago</label>
-               <div className={`grid grid-cols-1 ${mpHabilitado ? 'sm:grid-cols-2' : ''} gap-3`}>
-                 {mpHabilitado && (
-                 <label className={`flex items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all ${!esEfectivo ? 'border-blue-500 bg-blue-50/50 text-blue-700 shadow-sm' : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50 text-slate-600'}`}>
-                   <input type="radio" value="MERCADO_PAGO" {...register('metodoPago')} className="sr-only" disabled={isSubmitting} />
-                   <div className="flex items-center gap-2 font-bold text-sm">
-                     🔗 Mercado Pago (Link)
-                   </div>
-                 </label>
-                 )}
-
-                 <label className={`flex items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all ${esEfectivo ? 'border-emerald-500 bg-emerald-50/50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50 text-slate-600'}`}>
-                   <input type="radio" value="EFECTIVO" {...register('metodoPago')} className="sr-only" disabled={isSubmitting} />
-                   <div className="flex items-center gap-2 font-bold text-sm">
-                     💵 Efectivo (En el local)
-                   </div>
-                 </label>
+               <div className={`grid grid-cols-1 ${metodosHabilitados.length > 1 ? 'sm:grid-cols-2' : ''} gap-3`}>
+                 {metodosHabilitados.map((metodo) => {
+                   const seleccionado = metodoPago === metodo.value;
+                   return (
+                     <label
+                       key={metodo.value}
+                       className={`flex items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all ${
+                         seleccionado
+                           ? 'border-indigo-500 bg-indigo-50/50 text-indigo-700 shadow-sm'
+                           : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50 text-slate-600'
+                       }`}
+                     >
+                       <input type="radio" value={metodo.value} {...register('metodoPago')} className="sr-only" disabled={isSubmitting} />
+                       <div className="font-bold text-sm">{metodo.label}</div>
+                     </label>
+                   );
+                 })}
                </div>
+
+               {metodoPago === 'TRANSFERENCIA' && aliasCobro && (
+                 <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-xl text-sm">
+                   <span className="font-bold text-blue-800">Alias para transferencias: </span>
+                   <span className="font-mono font-bold text-blue-900">{aliasCobro}</span>
+                 </div>
+               )}
             </div>
 
             {esEfectivo && (
@@ -509,16 +529,18 @@ export const CreateVentaForm: React.FC<CreateVentaProps> = ({ onVentaCreated }) 
           {/* Lado Derecho: Totales y Cierre */}
           <div className="space-y-6">
             <div className="p-6 bg-slate-900 rounded-2xl shadow-xl border border-slate-800 text-white">
-              <div className="space-y-3 mb-6">
-                <div className="flex justify-between text-sm text-slate-400">
-                  <span>Neto Gravado:</span>
-                  <span className="text-white">${subtotalNeto.toFixed(2)}</span>
+              {muestraIva && (
+                <div className="space-y-3 mb-6">
+                  <div className="flex justify-between text-sm text-slate-400">
+                    <span>Neto Gravado:</span>
+                    <span className="text-white">${subtotalNeto.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-400 border-b border-slate-700 pb-3">
+                    <span>IVA ({ivaPorcentaje}%):</span>
+                    <span className="text-white">${calculoIva.toFixed(2)}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm text-slate-400 border-b border-slate-700 pb-3">
-                  <span>IVA (21%):</span>
-                  <span className="text-white">${calculoIva.toFixed(2)}</span>
-                </div>
-              </div>
+              )}
               <div className="flex justify-between items-baseline">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Operación</span>
                 <span className="text-4xl font-black text-white tracking-tight">
