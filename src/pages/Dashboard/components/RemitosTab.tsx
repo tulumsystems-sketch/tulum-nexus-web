@@ -1,15 +1,26 @@
 import React, { useState } from 'react';
 import useSWR from 'swr';
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form';
-import { Truck } from 'lucide-react';
+import { Download, Truck } from 'lucide-react';
 import apiClient from '../../../api/axiosConfig';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { StatusPill } from '../../../components/ui/StatusPill';
+import { CobranzasPanel } from './remitos/CobranzasPanel';
+import {
+  RemitoEstadoPago,
+  descargarRemitoPdf,
+  estadoPagoLabel,
+  estadoPagoStyles,
+  getEstadoPago,
+  getSaldoPendiente,
+} from './remitos/remitosShared';
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
 type RemitoStatus = 'PENDIENTE' | 'EN_VIAJE' | 'ENTREGADO' | 'INCIDENCIA';
+
+type VistaRemitos = 'operacion' | 'cobranzas';
 
 interface RemitoItem {
   productoId: number | string;
@@ -52,11 +63,16 @@ interface Remito {
     producto?: { nombre: string; precio?: number };
   }>;
   total?: number;
+  estadoPago?: RemitoEstadoPago;
+  montoPagado?: number;
+  saldoPendiente?: number;
 }
 
 export const RemitosTab: React.FC = () => {
+  const [vista, setVista] = useState<VistaRemitos>('operacion');
   const [activeFilter, setActiveFilter] = useState<RemitoStatus | 'TODOS'>('TODOS');
   const [isSubmittingRemito, setIsSubmittingRemito] = useState(false);
+  const [descargandoId, setDescargandoId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Data fetching
@@ -143,9 +159,28 @@ export const RemitosTab: React.FC = () => {
     }
   };
 
-  const filteredRemitos = Array.isArray(remitos)
-    ? (activeFilter === 'TODOS' ? remitos : remitos.filter((r: Remito) => r.estado === activeFilter))
-    : [];
+  const descargarPdf = async (remito: Remito) => {
+    setFeedback(null);
+    setDescargandoId(remito.id);
+    try {
+      await descargarRemitoPdf(remito);
+    } catch (error: any) {
+      setFeedback({
+        type: 'error',
+        message: 'No se pudo descargar el remito en PDF. ' + (error.response?.data?.message || ''),
+      });
+    } finally {
+      setDescargandoId(null);
+    }
+  };
+
+  const remitosList: Remito[] = Array.isArray(remitos) ? remitos : [];
+
+  const filteredRemitos = activeFilter === 'TODOS'
+    ? remitosList
+    : remitosList.filter((r: Remito) => r.estado === activeFilter);
+
+  const totalPorCobrar = remitosList.reduce((acc, r) => acc + getSaldoPendiente(r), 0);
 
   const getStatusStyles = (status: RemitoStatus) => {
     switch (status) {
@@ -164,11 +199,43 @@ export const RemitosTab: React.FC = () => {
         title="Remitos y hojas de ruta"
         description="Gestiona entregas, estados de viaje e incidencias con foco en stock y trazabilidad comercial."
         icon={Truck}
-        meta={<StatusPill label={`${filteredRemitos.length} remitos`} tone="blue" />}
+        meta={
+          <div className="flex flex-wrap gap-2">
+            <StatusPill label={`${remitosList.length} remitos`} tone="blue" />
+            <StatusPill
+              label={`${formatMoney(totalPorCobrar)} por cobrar`}
+              tone={totalPorCobrar > 0 ? 'amber' : 'emerald'}
+            />
+          </div>
+        }
       />
 
       {feedback && <ErrorAlert type={feedback.type} message={feedback.message} />}
 
+      {/* SELECTOR DE VISTA: OPERACIÓN LOGÍSTICA O COBRANZAS */}
+      <div className="flex w-full max-w-md p-1 bg-slate-100 rounded-xl border border-slate-200">
+        {([
+          { key: 'operacion', label: 'Remitos y entregas' },
+          { key: 'cobranzas', label: 'Cobranzas' },
+        ] as Array<{ key: VistaRemitos; label: string }>).map((opcion) => (
+          <button
+            key={opcion.key}
+            onClick={() => setVista(opcion.key)}
+            className={`flex-1 px-4 py-2.5 text-xs font-black uppercase tracking-wide rounded-lg transition-all ${
+              vista === opcion.key
+                ? 'bg-white text-slate-800 shadow-sm border border-slate-200'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {opcion.label}
+          </button>
+        ))}
+      </div>
+
+      {vista === 'cobranzas' ? (
+        <CobranzasPanel remitos={remitosList} onRemitosActualizados={mutateRemitos} />
+      ) : (
+        <>
       {/* SECCIÓN 1: FORMULARIO DE CREACIÓN */}
       <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-b border-slate-200">
@@ -347,15 +414,25 @@ export const RemitosTab: React.FC = () => {
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="text-sm font-black text-slate-400">#{r.nroRemito || r.id}</h4>
-                    <span className={`mt-1 inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded-lg border ${getStatusStyles(r.estado)}`}>
-                      {r.estado.replace('_', ' ')}
-                    </span>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded-lg border ${getStatusStyles(r.estado)}`}>
+                        {r.estado.replace('_', ' ')}
+                      </span>
+                      <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded-lg border ${estadoPagoStyles[getEstadoPago(r)]}`}>
+                        {estadoPagoLabel[getEstadoPago(r)]}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-[10px] font-bold text-slate-400 uppercase">
                       {new Date(r.fecha).toLocaleDateString('es-AR')}
                     </div>
                     <div className="mt-1 text-lg font-black text-slate-900">{formatMoney(r.total)}</div>
+                    {getSaldoPendiente(r) > 0 && (
+                      <div className="text-[10px] font-black uppercase text-red-500">
+                        Saldo {formatMoney(getSaldoPendiente(r))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -402,7 +479,17 @@ export const RemitosTab: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex gap-2">
+              <div className="mt-6 pt-4 border-t border-slate-100 space-y-2">
+                <button
+                  onClick={() => descargarPdf(r)}
+                  disabled={descargandoId === r.id}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-black uppercase bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition-colors disabled:opacity-50"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  {descargandoId === r.id ? 'Generando PDF...' : 'Descargar remito PDF'}
+                </button>
+
+                <div className="flex gap-2">
                 {r.estado === 'PENDIENTE' && (
                   <button
                     onClick={() => updateEstado(r.id, 'EN_VIAJE')}
@@ -440,6 +527,7 @@ export const RemitosTab: React.FC = () => {
                     OPERACIÓN FINALIZADA
                   </div>
                 )}
+                </div>
               </div>
             </div>
           )) : (
@@ -453,6 +541,8 @@ export const RemitosTab: React.FC = () => {
           )}
         </div>
       </section>
+        </>
+      )}
     </div>
   );
 };

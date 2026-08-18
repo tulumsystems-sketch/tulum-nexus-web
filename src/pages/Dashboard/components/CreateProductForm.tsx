@@ -4,6 +4,8 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import useSWR from 'swr';
 import apiClient from '../../../api/axiosConfig';
+import { calcularPrecioVenta, getMargenPorDefecto } from '../../../utils/tenantConfig';
+import { getSufijoUnidad } from '../../../utils/unidadMedida';
 
 export interface CreateProductProps {
   onProductCreated: () => void;
@@ -15,12 +17,22 @@ export interface ProductFormInputs {
   nombre: string;
   descripcion?: string;
   precio: number;
+  precioCosto?: number;
+  margenPorcentaje?: number;
   cantidadStock: number;
   medidas?: string;
   categoriaId: number;
   imageUrl?: string;
   stockMinimo?: number;
 }
+
+const redondear = (valor: number) => Math.round(valor * 100) / 100;
+
+const parseMargenOpcional = (valor: unknown): number | null => {
+  if (valor === '' || valor == null) return null;
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : null;
+};
 
 /**
  * Validación Declarativa (Yup) - Agregando campo imageUrl
@@ -33,6 +45,16 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
     .transform((value) => (isNaN(value) ? undefined : value))
     .required('El precio es obligatorio.')
     .positive('El precio debe ser mayor a 0.'),
+  precioCosto: yup
+    .number()
+    .transform((value) => (isNaN(value) ? undefined : value))
+    .min(0, 'El costo no puede ser negativo.')
+    .optional(),
+  margenPorcentaje: yup
+    .number()
+    .transform((value) => (isNaN(value) ? undefined : value))
+    .min(0, 'El margen no puede ser negativo.')
+    .optional(),
   cantidadStock: yup
     .number()
     .transform((value) => (isNaN(value) ? undefined : value))
@@ -62,15 +84,45 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
 
   // Carga asíncrona de categorías
   const { data: categorias, isLoading: isLoadingCategorias, error: categoriesError } = useSWR('/categorias', fetcher);
+  const { data: globalConfig } = useSWR('/config', fetcher);
+
+  const margenPorDefecto = getMargenPorDefecto(globalConfig);
+  const usaMargenAutomatico = margenPorDefecto !== null;
+
+  // Cuando el usuario escribe el precio de venta a mano dejamos de recalcularlo.
+  const [precioPisado, setPrecioPisado] = useState(false);
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormInputs>({
     resolver: yupResolver(productSchema),
   });
+
+  const [precioCostoActual, margenActual, categoriaIdActual] = watch(['precioCosto', 'margenPorcentaje', 'categoriaId']);
+
+  // Un input number vacío llega como "" y Number("") === 0, lo que pisaba el 15%
+  // configurado del negocio. Sólo usamos el valor del input si el usuario escribió algo.
+  const margenIngresado = parseMargenOpcional(margenActual);
+  const margenAplicado = margenIngresado !== null ? margenIngresado : margenPorDefecto;
+  const costoNumerico = Number(precioCostoActual);
+  const precioSugerido = costoNumerico > 0 && margenAplicado !== null
+    ? redondear(calcularPrecioVenta(costoNumerico, margenAplicado))
+    : null;
+
+  const unidadCategoria = React.useMemo(() => {
+    const categoria = Array.isArray(categorias)
+      ? categorias.find((c: any) => String(c.id) === String(categoriaIdActual))
+      : null;
+    return categoria ? getSufijoUnidad(categoria.unidadMedida) : null;
+  }, [categorias, categoriaIdActual]);
+
+  // Editando un producto viejo sin costo no podemos derivar nada: avisamos y respetamos el precio.
+  const faltaCostoEnProductoExistente = Boolean(initialData) && initialData?.precioCosto == null;
 
   useEffect(() => {
     if (initialData) {
@@ -78,26 +130,40 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         nombre: initialData.nombre,
         descripcion: initialData.descripcion,
         precio: initialData.precio,
+        precioCosto: initialData.precioCosto ?? undefined,
+        margenPorcentaje: initialData.margenPorcentaje ?? undefined,
         cantidadStock: initialData.cantidadStock,
         medidas: initialData.medidas,
         categoriaId: initialData.categoria?.id ?? initialData.categoriaId,
         stockMinimo: initialData.stockMinimo ?? 0,
       });
       setPreviewUrl(initialData.imageUrl || null);
+      // El precio guardado manda hasta que se toque el costo.
+      setPrecioPisado(true);
     } else {
       reset({
         nombre: '',
         descripcion: '',
         precio: undefined,
+        precioCosto: undefined,
+        margenPorcentaje: undefined,
         cantidadStock: undefined,
         medidas: '',
         categoriaId: undefined,
         stockMinimo: undefined,
       });
       setPreviewUrl(null);
+      setPrecioPisado(false);
     }
     setSelectedFile(null);
   }, [initialData, reset]);
+
+  // El precio de venta se recalcula solo mientras no lo hayan pisado a mano.
+  useEffect(() => {
+    if (!precioPisado && precioSugerido !== null) {
+      setValue('precio', precioSugerido, { shouldValidate: false });
+    }
+  }, [precioSugerido, precioPisado, setValue]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -143,6 +209,8 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         nombre: data.nombre,
         descripcion: data.descripcion,
         precio: data.precio,
+        precioCosto: data.precioCosto ?? null,
+        margenPorcentaje: data.margenPorcentaje ?? null,
         cantidadStock: data.cantidadStock,
         medidas: data.medidas,
         categoriaId: data.categoriaId,
@@ -158,6 +226,7 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
 
       reset();
       clearFile();
+      setPrecioPisado(false);
       onProductCreated();
     } catch (error: any) {
       if (!error.response) {
@@ -278,17 +347,70 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
         </div>
 
-        {/* Fila 3: Precio, Cantidad, Medidas, Stock Minimo */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Fila 3: Costo, Margen y Precio de Venta */}
+        {faltaCostoEnProductoExistente && (
+          <div className="p-4 text-sm text-amber-800 bg-amber-50 border-l-4 border-amber-400 rounded-r" role="alert">
+            Este producto no tiene precio de costo cargado. El precio de venta actual se mantiene tal como está;
+            si cargás el costo, el precio se recalcula con el margen.
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Precio *</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Precio de Costo</label>
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-slate-400 font-medium">$</span>
               <input
                 type="number"
                 step="0.01"
-                {...register('precio')}
+                {...register('precioCosto', { onChange: () => setPrecioPisado(false) })}
                 className={`w-full pl-8 pr-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                  errors.precioCosto ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+                }`}
+                placeholder="0.00"
+                disabled={isSubmitting}
+              />
+            </div>
+            {errors.precioCosto
+              ? <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.precioCosto.message}</p>
+              : <p className="mt-1 text-xs text-slate-400">Lo que te cuesta el producto.</p>}
+          </div>
+
+          <div>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Margen (%)</label>
+            <div className="relative">
+              <input
+                type="number"
+                step="0.01"
+                {...register('margenPorcentaje', { onChange: () => setPrecioPisado(false) })}
+                className={`w-full px-4 py-2.5 pr-9 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                  errors.margenPorcentaje ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+                }`}
+                placeholder={usaMargenAutomatico ? String(margenPorDefecto) : 'Sin margen'}
+                disabled={isSubmitting}
+              />
+              <span className="absolute right-3 top-2.5 text-slate-400 font-medium">%</span>
+            </div>
+            {errors.margenPorcentaje
+              ? <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.margenPorcentaje.message}</p>
+              : (
+                <p className="mt-1 text-xs text-slate-400">
+                  {usaMargenAutomatico
+                    ? `Vacío usa el ${margenPorDefecto}% configurado para el negocio.`
+                    : 'Sin margen configurado: cargá el precio de venta a mano.'}
+                </p>
+              )}
+          </div>
+
+          <div>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Precio de Venta *</label>
+            <div className="relative">
+              <span className="absolute left-3 top-2.5 text-slate-400 font-medium">$</span>
+              <input
+                type="number"
+                step="0.01"
+                {...register('precio', { onChange: () => setPrecioPisado(true) })}
+                className={`w-full pl-8 pr-4 py-2.5 font-bold text-slate-800 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
                   errors.precio ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
                 }`}
                 placeholder="0.00"
@@ -296,10 +418,30 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
               />
             </div>
             {errors.precio && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.precio.message}</p>}
+            {!errors.precio && precioSugerido !== null && (
+              precioPisado ? (
+                <button
+                  type="button"
+                  onClick={() => setPrecioPisado(false)}
+                  className="mt-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                >
+                  Recalcular con el margen: ${precioSugerido.toFixed(2)}
+                </button>
+              ) : (
+                <p className="mt-1 text-xs font-semibold text-emerald-600">
+                  Calculado con {margenAplicado}% sobre el costo. Podés editarlo.
+                </p>
+              )
+            )}
           </div>
+        </div>
 
+        {/* Fila 4: Stock, Stock Minimo y Medidas */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Stock *</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">
+              Stock *{unidadCategoria ? <span className="ml-1 font-normal text-slate-400">(en {unidadCategoria})</span> : null}
+            </label>
             <input
               type="number"
               {...register('cantidadStock')}

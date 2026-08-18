@@ -3,10 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { 
   Search, Plus, Minus, Trash2, ShoppingBag, 
-  ArrowLeft, CreditCard, Banknote, Clock, CheckCircle, X
+  ArrowLeft, Clock, CheckCircle, X, User
 } from 'lucide-react';
 import apiClient from '../../api/axiosConfig';
 import { useTenantFeatures } from '../../hooks/useTenantFeatures';
+import {
+  MetodoPago,
+  calcularTotales,
+  discriminaIva,
+  getAliasCobro,
+  getMetodosPagoHabilitados,
+} from '../../utils/tenantConfig';
+import { getSufijoUnidad, getUnidadDeProducto } from '../../utils/unidadMedida';
+import { imprimirTicket } from '../../utils/ticketTemplate';
 
 /**
  * POS - Point Of Sale (Modo Zen Redesign)
@@ -18,7 +27,7 @@ interface Producto {
   precio: number;
   imageUrl?: string;
   cantidadStock: number;
-  categoriaId: number;
+  categoria?: { id: number; nombre: string; unidadMedida?: string };
   codigoBarras?: string;
 }
 
@@ -30,6 +39,7 @@ interface CartItem {
   imageUrl?: string;
   cantidadStock: number;
   codigoBarras?: string;
+  unidadMedida: string;
 }
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
@@ -48,15 +58,27 @@ export const POS: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false); // Cambiado a Drawer
   const [showMobileCart, setShowMobileCart] = useState(false);
-  const mpHabilitado = globalConfig?.mpAceptarCredito || globalConfig?.mpAceptarDebito;
-  const [metodoPago, setMetodoPago] = useState<'EFECTIVO' | 'MERCADO_PAGO'>(mpHabilitado ? 'MERCADO_PAGO' : 'EFECTIVO');
+
+  const metodosHabilitados = getMetodosPagoHabilitados(globalConfig);
+  const aliasCobro = getAliasCobro(globalConfig);
+  const clientesHabilitados = globalConfig?.clientesHabilitado ?? true;
+
+  const [metodoPago, setMetodoPago] = useState<MetodoPago>('EFECTIVO');
   const [montoAbonado, setMontoAbonado] = useState<number | ''>('');
 
+  // El método seleccionado siempre tiene que ser uno de los habilitados para el tenant.
   useEffect(() => {
-    if (!mpHabilitado && metodoPago === 'MERCADO_PAGO') {
-      setMetodoPago('EFECTIVO');
+    if (globalConfig && !metodosHabilitados.some((m) => m.value === metodoPago)) {
+      setMetodoPago(metodosHabilitados[0].value);
     }
-  }, [mpHabilitado, metodoPago]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalConfig, metodoPago]);
+
+  // Cliente de la venta. null = venta de mostrador (Consumidor Final).
+  const [clienteId, setClienteId] = useState<number | null>(null);
+  const [clienteSearch, setClienteSearch] = useState('');
+  const { data: clientes } = useSWR(clientesHabilitados ? '/clientes' : null, fetcher);
+
   const [apiError, setApiError] = useState<string | null>(null);
   const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
   const [successVentaId, setSuccessVentaId] = useState<string | number | null>(null);
@@ -87,10 +109,25 @@ export const POS: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Cálculos totales
+  // Cálculos totales (el IVA sale de la configuración del tenant)
   const subtotalNeto = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
-  const calculoIva = subtotalNeto * 0.21;
-  const totalVenta = subtotalNeto + calculoIva;
+  const { ivaPorcentaje, iva: calculoIva, total: totalVenta } = calcularTotales(subtotalNeto, globalConfig);
+  const muestraIva = discriminaIva(globalConfig);
+
+  const nombreCliente = (cliente: any): string =>
+    `${cliente?.nombre || ''} ${cliente?.apellido || ''}`.trim() || 'Cliente sin nombre';
+
+  const clienteSeleccionado = Array.isArray(clientes)
+    ? clientes.find((c: any) => c.id === clienteId) ?? null
+    : null;
+
+  const clientesFiltrados = (Array.isArray(clientes) ? clientes : [])
+    .filter((c: any) => {
+      const termino = clienteSearch.trim().toLowerCase();
+      if (termino === '') return true;
+      return `${c.nombre || ''} ${c.apellido || ''} ${c.empresa || ''}`.toLowerCase().includes(termino);
+    })
+    .slice(0, 6);
 
   const getProductStock = (productoId: number): number => {
     const prod = Array.isArray(productos) ? productos.find((p: any) => p.id === productoId) : null;
@@ -128,6 +165,7 @@ export const POS: React.FC = () => {
           imageUrl: p.imageUrl,
           cantidadStock: stockDisponible,
           codigoBarras: p.codigoBarras,
+          unidadMedida: getUnidadDeProducto(p),
         },
       ];
     });
@@ -181,7 +219,7 @@ export const POS: React.FC = () => {
     setApiError(null);
 
     const payload = {
-      clienteId: null,
+      clienteId,
       items: cart.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })),
       metodoPago,
       ...(metodoPago === 'EFECTIVO' && { montoAbonado: Number(montoAbonado) }),
@@ -193,17 +231,21 @@ export const POS: React.FC = () => {
       const calculatedVuelto = metodoPago === 'EFECTIVO' && montoAbonado ? Number(montoAbonado) - totalVenta : 0;
       setVueltoFinal(calculatedVuelto >= 0 ? calculatedVuelto : 0);
 
-      // Armamos objeto local para imprimir similar al servicio del Dashboard
+      // Armamos objeto local para imprimir con la misma plantilla que el Dashboard
       setCurrentVentaPrint({
          id: response.data?.id || 'VentaId',
          nroComprobante: response.data?.nroComprobante || response.data?.id || 'Id',
          fecha: new Date(),
+         cliente: clienteSeleccionado,
+         totalNeto: subtotalNeto,
+         totalIva: calculoIva,
          totalFinal: totalVenta,
          metodoPago,
          montoAbonado: metodoPago === 'EFECTIVO' ? Number(montoAbonado) : 0,
          items: cart.map(i => ({
             cantidad: i.cantidad,
             precioUnitario: i.precio,
+            unidadMedida: i.unidadMedida,
             producto: { nombre: i.nombre }
          }))
       });
@@ -212,6 +254,8 @@ export const POS: React.FC = () => {
       setCart([]);
       setIsDrawerOpen(false); // Cerrar drawer al aprobar
       setMontoAbonado('');
+      setClienteId(null);
+      setClienteSearch('');
 
     } catch (err: any) {
       const backendMessage = err.response?.data?.message || '';
@@ -221,67 +265,7 @@ export const POS: React.FC = () => {
     }
   };
 
-  const handleImprimir = (venta: any) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const itemsHtml = venta.items?.map((item: any) => `
-      <tr>
-        <td style="padding: 5px 0;">${item.cantidad} x ${item.producto?.nombre || 'Producto'}</td>
-        <td style="text-align: right;">$${(item.precioUnitario * item.cantidad).toFixed(2)}</td>
-      </tr>
-    `).join('') || '';
-
-    const fecha = new Date(venta.fecha || Date.now()).toLocaleString('es-AR');
-
-    const htmlContent = `
-      <html>
-        <head>
-          <title>Ticket #BT-${venta.nroComprobante || venta.id}</title>
-          <style>
-            body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0 auto; color: #000; font-size: 11px; padding: 10px; }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .header { margin-bottom: 15px; border-bottom: 1px dashed #000; padding-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-            .totals { border-top: 1px dashed #000; padding-top: 10px; }
-            .footer { margin-top: 20px; text-align: center; font-size: 9px; border-top: 1px dashed #000; padding-top: 10px; }
-          </style>
-        </head>
-        <body>
-          <div class="header center">
-            <div class="bold" style="font-size: 15px;">${globalConfig?.nombreEmpresa || 'TULUM SYSTEMS'}</div>
-            <div>COMPROBANTE NO FISCAL</div>
-          </div>
-          <div>
-            <div class="bold">TICKET: #BT-${venta.nroComprobante || venta.id}</div>
-            <div>FECHA: ${fecha}</div>
-            <div>CLIENTE: Consumidor Final</div>
-          </div>
-          <table>
-             <thead><tr style="border-bottom: 1px solid #000;"><th style="text-align: left;">DESCRIPCIÓN</th><th style="text-align: right;">TOTAL</th></tr></thead>
-             <tbody>${itemsHtml}</tbody>
-          </table>
-          <div class="totals">
-            <div style="display: flex; justify-content: space-between;"><span>SUBTOTAL:</span><span>$${(venta.totalFinal / 1.21).toFixed(2)}</span></div>
-            <div style="display: flex; justify-content: space-between;"><span>IVA (21%):</span><span>$${(venta.totalFinal - (venta.totalFinal / 1.21)).toFixed(2)}</span></div>
-            <div style="display: flex; justify-content: space-between;" class="bold"><span>TOTAL:</span><span>$${(venta.totalFinal || 0).toFixed(2)}</span></div>
-          </div>
-          <div style="margin-top: 10px;">
-            <div>FORMA DE PAGO: ${venta.metodoPago || 'EFECTIVO'}</div>
-            ${venta.montoAbonado ? `<div>ABONADO: $${venta.montoAbonado.toFixed(2)}</div>` : ''}
-            ${venta.montoAbonado ? `<div class="bold">VUELTO: $${(venta.montoAbonado - venta.totalFinal).toFixed(2)}</div>` : ''}
-          </div>
-          <div class="footer"><p>¡Gracias por su compra!</p><p>SaaS POS - Tulum Systems</p></div>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
-  };
+  const handleImprimir = (venta: any) => imprimirTicket(venta, globalConfig);
 
 
   // Overlay de validación de Caja Cerrada
@@ -384,8 +368,11 @@ export const POS: React.FC = () => {
                           {barcodeEnabled && p.codigoBarras && (
                             <p className="mb-1 truncate font-mono text-[10px] font-bold text-slate-400">{p.codigoBarras}</p>
                           )}
-                          <p className="text-blue-600 font-extrabold text-sm md:text-base">${Number(p.precio).toFixed(2)}</p>
-                          <p className={`text-[10px] font-bold mt-1 ${p.cantidadStock <= 5 ? 'text-red-500' : 'text-slate-400'}`}>Stock: {p.cantidadStock}</p>
+                          <p className="text-blue-600 font-extrabold text-sm md:text-base">
+                            ${Number(p.precio).toFixed(2)}
+                            <span className="ml-1 text-[10px] font-bold text-slate-400">/ {getSufijoUnidad(getUnidadDeProducto(p))}</span>
+                          </p>
+                          <p className={`text-[10px] font-bold mt-1 ${p.cantidadStock <= 5 ? 'text-red-500' : 'text-slate-400'}`}>Stock: {p.cantidadStock} {getSufijoUnidad(getUnidadDeProducto(p))}</p>
                       </div>
                     </button>
                  ))}
@@ -456,8 +443,8 @@ export const POS: React.FC = () => {
                      )}
                       <div className="flex-1 min-w-0">
                          <h4 className="font-bold text-slate-800 text-sm line-clamp-1">{i.nombre}</h4>
-                         <p className="text-xs font-black text-blue-600">${i.precio.toFixed(2)}</p>
-                         <p className={`text-[10px] font-bold ${getProductStock(i.productoId) <= 5 ? 'text-red-400' : 'text-slate-400'}`}>Stock disp: {getProductStock(i.productoId)}</p>
+                         <p className="text-xs font-black text-blue-600">${i.precio.toFixed(2)} / {getSufijoUnidad(i.unidadMedida)}</p>
+                         <p className={`text-[10px] font-bold ${getProductStock(i.productoId) <= 5 ? 'text-red-400' : 'text-slate-400'}`}>Stock disp: {getProductStock(i.productoId)} {getSufijoUnidad(i.unidadMedida)}</p>
                          
                          <div className="flex items-center gap-2 mt-2">
                             <button onClick={() => handleUpdateQuantity(i.productoId, i.cantidad - 1)} className="p-1 border bg-white border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"><Minus className="w-3.5 h-3.5" /></button>
@@ -474,14 +461,18 @@ export const POS: React.FC = () => {
          {/* Bottom Resumen y Acción */}
          <div className="p-6 border-t border-slate-100 bg-slate-950 text-white space-y-4 flex-shrink-0">
             <div className="space-y-1">
-               <div className="flex justify-between text-xs text-slate-400 font-bold">
-                  <span>Neto:</span>
-                  <span className="text-slate-200">${subtotalNeto.toFixed(2)}</span>
-               </div>
-               <div className="flex justify-between text-xs text-slate-400 font-bold border-b border-slate-800 pb-1.5">
-                  <span>IVA (21%):</span>
-                  <span className="text-slate-200">${calculoIva.toFixed(2)}</span>
-               </div>
+               {muestraIva && (
+                 <div className="flex justify-between text-xs text-slate-400 font-bold">
+                    <span>Neto:</span>
+                    <span className="text-slate-200">${subtotalNeto.toFixed(2)}</span>
+                 </div>
+               )}
+               {muestraIva && (
+                 <div className="flex justify-between text-xs text-slate-400 font-bold border-b border-slate-800 pb-1.5">
+                    <span>IVA ({ivaPorcentaje}%):</span>
+                    <span className="text-slate-200">${calculoIva.toFixed(2)}</span>
+                 </div>
+               )}
                <div className="flex justify-between items-baseline pt-2">
                   <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total Operación</span>
                   <span className="text-3xl font-black text-white tracking-tighter">
@@ -515,22 +506,94 @@ export const POS: React.FC = () => {
 
                <form onSubmit={handleFinalizarVenta} className="space-y-6 flex-1 flex flex-col justify-between">
                   <div className="space-y-6">
-                     <label className="block text-sm font-black text-slate-700 uppercase tracking-wide">Método de Pago</label>
-                      <div className={`grid ${mpHabilitado ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
-                         {mpHabilitado && (
-                         <label className={`flex flex-col items-center justify-center p-5 border-2 rounded-2xl cursor-pointer transition-all ${metodoPago === 'MERCADO_PAGO' ? 'border-blue-500 bg-blue-50/30 text-blue-800 font-bold shadow-md' : 'border-slate-100 hover:border-slate-200 text-slate-500 bg-slate-50'}`}>
-                            <input type="radio" value="MERCADO_PAGO" checked={metodoPago === 'MERCADO_PAGO'} onChange={() => setMetodoPago('MERCADO_PAGO')} className="sr-only" />
-                            <CreditCard className="w-6 h-6 mb-2 text-inherit" />
-                            <span className="text-xs">M. Pago</span>
-                         </label>
+                     {clientesHabilitados && (
+                       <div className="space-y-2">
+                         <label className="block text-sm font-black text-slate-700 uppercase tracking-wide">Cliente</label>
+                         {clienteSeleccionado ? (
+                           <div className="flex items-center gap-3 p-3 border-2 border-indigo-200 bg-indigo-50/50 rounded-2xl">
+                             <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center flex-shrink-0">
+                               <User className="w-4 h-4" />
+                             </div>
+                             <div className="flex-1 min-w-0">
+                               <div className="font-bold text-sm text-slate-800 truncate">{nombreCliente(clienteSeleccionado)}</div>
+                               {clienteSeleccionado.empresa && (
+                                 <div className="text-xs font-semibold text-slate-500 truncate">{clienteSeleccionado.empresa}</div>
+                               )}
+                             </div>
+                             <button
+                               type="button"
+                               onClick={() => setClienteId(null)}
+                               className="px-3 py-1.5 text-xs font-black text-slate-500 bg-white border border-slate-200 rounded-lg hover:text-slate-800 hover:bg-slate-50 transition-colors"
+                             >
+                               Quitar
+                             </button>
+                           </div>
+                         ) : (
+                           <div className="space-y-2">
+                             <div className="relative">
+                               <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                               <input
+                                 type="text"
+                                 value={clienteSearch}
+                                 onChange={(e) => setClienteSearch(e.target.value)}
+                                 placeholder="Buscar cliente por nombre o empresa..."
+                                 className="w-full pl-9 pr-4 py-2.5 text-sm font-bold text-slate-700 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-indigo-400 focus:bg-white transition-all"
+                               />
+                             </div>
+                             {clienteSearch.trim() !== '' && (
+                               <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-100 divide-y divide-slate-100">
+                                 {clientesFiltrados.length > 0 ? clientesFiltrados.map((c: any) => (
+                                   <button
+                                     key={c.id}
+                                     type="button"
+                                     onClick={() => { setClienteId(c.id); setClienteSearch(''); }}
+                                     className="w-full px-3 py-2.5 text-left hover:bg-indigo-50 transition-colors"
+                                   >
+                                     <div className="text-sm font-bold text-slate-700">{nombreCliente(c)}</div>
+                                     {c.empresa && <div className="text-xs font-semibold text-slate-400">{c.empresa}</div>}
+                                   </button>
+                                 )) : (
+                                   <div className="px-3 py-3 text-xs font-bold text-slate-400 italic">Sin resultados.</div>
+                                 )}
+                               </div>
+                             )}
+                             <p className="text-xs font-bold text-slate-400">
+                               Sin cliente seleccionado la venta se registra como Consumidor Final.
+                             </p>
+                           </div>
                          )}
+                       </div>
+                     )}
 
-                         <label className={`flex flex-col items-center justify-center p-5 border-2 rounded-2xl cursor-pointer transition-all ${metodoPago === 'EFECTIVO' ? 'border-emerald-500 bg-emerald-50/30 text-emerald-800 font-bold shadow-md' : 'border-slate-100 hover:border-slate-200 text-slate-500 bg-slate-50'}`}>
-                            <input type="radio" value="EFECTIVO" checked={metodoPago === 'EFECTIVO'} onChange={() => setMetodoPago('EFECTIVO')} className="sr-only" />
-                            <Banknote className="w-6 h-6 mb-2 text-inherit" />
-                            <span className="text-xs">Efectivo</span>
-                         </label>
+                     <label className="block text-sm font-black text-slate-700 uppercase tracking-wide">Método de Pago</label>
+                      <div className={`grid ${metodosHabilitados.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+                         {metodosHabilitados.map((metodo) => (
+                           <label
+                             key={metodo.value}
+                             className={`flex flex-col items-center justify-center p-5 border-2 rounded-2xl cursor-pointer transition-all text-center ${
+                               metodoPago === metodo.value
+                                 ? 'border-indigo-500 bg-indigo-50/30 text-indigo-800 font-bold shadow-md'
+                                 : 'border-slate-100 hover:border-slate-200 text-slate-500 bg-slate-50'
+                             }`}
+                           >
+                             <input
+                               type="radio"
+                               value={metodo.value}
+                               checked={metodoPago === metodo.value}
+                               onChange={() => setMetodoPago(metodo.value)}
+                               className="sr-only"
+                             />
+                             <span className="text-xs font-bold">{metodo.label}</span>
+                           </label>
+                         ))}
                       </div>
+
+                     {metodoPago === 'TRANSFERENCIA' && aliasCobro && (
+                        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-center">
+                           <div className="text-xs font-black text-blue-700 uppercase tracking-widest">Alias para transferencias</div>
+                           <div className="mt-1 text-lg font-black text-blue-900 font-mono break-all">{aliasCobro}</div>
+                        </div>
+                     )}
 
                      {metodoPago === 'EFECTIVO' && (
                         <div className="bg-slate-900 p-6 rounded-3xl text-white space-y-4 shadow-xl">

@@ -7,10 +7,20 @@ import apiClient from '../../../api/axiosConfig';
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
+// El operador es el cajero (usa el punto de venta); el preventista sólo toma pedidos.
+const ROLES_ASIGNABLES = ['OPERADOR', 'PREVENTISTA', 'ADMIN'];
+
 const getRoleLabel = (rol: string) => {
-  if (rol === 'OPERADOR') return 'Preventista';
+  if (rol === 'OPERADOR') return 'Operador (Caja)';
+  if (rol === 'PREVENTISTA') return 'Preventista';
   if (rol === 'ADMIN') return 'Administrador';
   return rol;
+};
+
+/** El botón de cambio de rol rota entre los roles asignables. */
+const getRolSiguiente = (rol: string) => {
+  const indice = ROLES_ASIGNABLES.indexOf(rol);
+  return ROLES_ASIGNABLES[(indice + 1) % ROLES_ASIGNABLES.length];
 };
 
 interface Usuario {
@@ -71,7 +81,7 @@ export const UsuariosTab: React.FC = () => {
    */
   const toggleRol = async (usuario: Usuario) => {
     try {
-      const newRol = usuario.rol === 'ADMIN' ? 'OPERADOR' : 'ADMIN';
+      const newRol = getRolSiguiente(usuario.rol);
       await apiClient.put(`/usuarios/${usuario.id}/rol`, { rol: newRol });
       await mutate();
     } catch (err: any) {
@@ -156,10 +166,12 @@ export const UsuariosTab: React.FC = () => {
               className={`w-full px-4 py-2.5 text-sm font-semibold transition-all border rounded-xl text-slate-700 bg-slate-50/50 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white ${errors.rol ? 'border-red-500 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200'
                 }`}
             >
-              <option value="OPERADOR">Preventista</option>
+              <option value="OPERADOR">Operador (Caja)</option>
+              <option value="PREVENTISTA">Preventista</option>
               <option value="ADMIN">Administrador</option>
             </select>
             {errors.rol && <p className="mt-1 text-xs text-red-500">{errors.rol.message}</p>}
+            <p className="mt-1 text-xs font-semibold text-slate-400">El preventista no accede al punto de venta.</p>
           </div>
 
           <div className="flex items-end md:w-32">
@@ -202,7 +214,9 @@ export const UsuariosTab: React.FC = () => {
                       <span
                         className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full border shadow-sm ${usuario.rol === 'ADMIN'
                             ? 'bg-blue-50 text-blue-700 border-blue-200'
-                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                            : usuario.rol === 'PREVENTISTA'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
                           }`}
                       >
                         {getRoleLabel(usuario.rol)}
@@ -213,7 +227,7 @@ export const UsuariosTab: React.FC = () => {
                         <button
                           onClick={() => toggleRol(usuario)}
                           className="px-3 py-1.5 text-xs font-bold text-indigo-600 transition-colors bg-indigo-50 border border-indigo-100 rounded-lg hover:bg-indigo-600 hover:text-white"
-                          title="Cambiar Rol"
+                          title={`Cambiar a ${getRoleLabel(getRolSiguiente(usuario.rol))}`}
                         >
                           Cambiar Rol
                         </button>

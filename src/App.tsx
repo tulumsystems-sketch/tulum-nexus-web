@@ -34,10 +34,11 @@ const App: React.FC = () => {
           }
         />
 
+        {/* El preventista toma pedidos en la calle: no cobra por el punto de venta */}
         <Route
           path="/pos"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute rolesBloqueados={['PREVENTISTA']}>
               <POS />
             </ProtectedRoute>
           }
