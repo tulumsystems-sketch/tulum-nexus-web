@@ -7,6 +7,7 @@ import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { StatusPill } from '../../../components/ui/StatusPill';
 import { CobranzasPanel } from './remitos/CobranzasPanel';
+import { ProductoBuscador, ProductoBusqueda } from './remitos/ProductoBuscador';
 import {
   RemitoEstadoPago,
   descargarRemitoPdf,
@@ -28,14 +29,14 @@ interface RemitoItem {
   descripcion: string;
 }
 
-interface ProductoOption {
-  id: number;
-  nombre: string;
-  precio?: number;
-  cantidadStock?: number;
-}
-
 interface RemitoFormInputs {
+  clienteId: number | string;
+  direccionEntrega: string;
+  nombreDestinatario: string;
+  telefonoDestinatario: string;
+  observaciones: string;
+  items: RemitoItem[];
+}
   clienteId: number | string;
   direccionEntrega: string;
   nombreDestinatario: string;
@@ -68,16 +69,16 @@ interface Remito {
   saldoPendiente?: number;
 }
 
-export const RemitosTab: React.FC = () => {
+export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCobranzas = false }) => {
   const [vista, setVista] = useState<VistaRemitos>('operacion');
   const [activeFilter, setActiveFilter] = useState<RemitoStatus | 'TODOS'>('TODOS');
   const [isSubmittingRemito, setIsSubmittingRemito] = useState(false);
   const [descargandoId, setDescargandoId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [productosElegidos, setProductosElegidos] = useState<Record<number, ProductoBusqueda>>({});
 
   // Data fetching
   const { data: clientes } = useSWR('/clientes', fetcher);
-  const { data: productos } = useSWR('/productos', fetcher);
   const { data: remitos, mutate: mutateRemitos } = useSWR('/remitos', fetcher);
 
   const { register, control, handleSubmit, reset, watch, setValue } = useForm<RemitoFormInputs>({
@@ -93,8 +94,8 @@ export const RemitosTab: React.FC = () => {
     `$${Number(value || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const getSelectedProducto = (productoId: number | string) => {
-    if (!Array.isArray(productos) || productoId === '') return null;
-    return productos.find((p: ProductoOption) => String(p.id) === String(productoId)) || null;
+    if (productoId === '') return null;
+    return Object.values(productosElegidos).find((p) => String(p.id) === String(productoId)) || null;
   };
 
   const getItemPrecio = (item?: RemitoItem) => Number(item ? getSelectedProducto(item.productoId)?.precio || 0 : 0);
@@ -119,6 +120,10 @@ export const RemitosTab: React.FC = () => {
     name: "items"
   });
 
+  React.useEffect(() => {
+    if (ocultarCobranzas) setVista('operacion');
+  }, [ocultarCobranzas]);
+
   const onSubmit: SubmitHandler<RemitoFormInputs> = async (data) => {
     setIsSubmittingRemito(true);
     setFeedback(null);
@@ -133,6 +138,7 @@ export const RemitosTab: React.FC = () => {
         }))
       });
       reset();
+      setProductosElegidos({});
       await mutateRemitos();
       setFeedback({ type: 'success', message: 'Remito creado correctamente.' });
     } catch (error: any) {
@@ -202,17 +208,19 @@ export const RemitosTab: React.FC = () => {
         meta={
           <div className="flex flex-wrap gap-2">
             <StatusPill label={`${remitosList.length} remitos`} tone="blue" />
-            <StatusPill
-              label={`${formatMoney(totalPorCobrar)} por cobrar`}
-              tone={totalPorCobrar > 0 ? 'amber' : 'emerald'}
-            />
+            {!ocultarCobranzas && (
+              <StatusPill
+                label={`${formatMoney(totalPorCobrar)} por cobrar`}
+                tone={totalPorCobrar > 0 ? 'amber' : 'emerald'}
+              />
+            )}
           </div>
         }
       />
 
       {feedback && <ErrorAlert type={feedback.type} message={feedback.message} />}
 
-      {/* SELECTOR DE VISTA: OPERACIÓN LOGÍSTICA O COBRANZAS */}
+      {!ocultarCobranzas && (
       <div className="flex w-full max-w-md p-1 bg-slate-100 rounded-xl border border-slate-200">
         {([
           { key: 'operacion', label: 'Remitos y entregas' },
@@ -231,8 +239,9 @@ export const RemitosTab: React.FC = () => {
           </button>
         ))}
       </div>
+      )}
 
-      {vista === 'cobranzas' ? (
+      {!ocultarCobranzas && vista === 'cobranzas' ? (
         <CobranzasPanel remitos={remitosList} onRemitosActualizados={mutateRemitos} />
       ) : (
         <>
@@ -312,15 +321,19 @@ export const RemitosTab: React.FC = () => {
                 <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50/50 p-4 rounded-xl border border-slate-100">
                   <div className="md:col-span-4">
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Producto</label>
-                    <select
-                      {...register(`items.${index}.productoId` as const)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
-                    >
-                      <option value="">Seleccionar...</option>
-                      {productos?.map((p: ProductoOption) => (
-                        <option key={p.id} value={p.id}>{p.nombre} - {formatMoney(p.precio)} - Stock: {p.cantidadStock ?? 0}</option>
-                      ))}
-                    </select>
+                    <ProductoBuscador
+                      value={watchedItems?.[index]?.productoId ?? ''}
+                      formatMoney={formatMoney}
+                      onSelect={(producto) => {
+                        setValue(`items.${index}.productoId`, producto ? producto.id : '');
+                        setProductosElegidos((prev) => {
+                          const next = { ...prev };
+                          if (producto) next[index] = producto;
+                          else delete next[index];
+                          return next;
+                        });
+                      }}
+                    />
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cant.</label>
@@ -418,9 +431,11 @@ export const RemitosTab: React.FC = () => {
                       <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded-lg border ${getStatusStyles(r.estado)}`}>
                         {r.estado.replace('_', ' ')}
                       </span>
+                      {!ocultarCobranzas && (
                       <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded-lg border ${estadoPagoStyles[getEstadoPago(r)]}`}>
                         {estadoPagoLabel[getEstadoPago(r)]}
                       </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
@@ -428,7 +443,7 @@ export const RemitosTab: React.FC = () => {
                       {new Date(r.fecha).toLocaleDateString('es-AR')}
                     </div>
                     <div className="mt-1 text-lg font-black text-slate-900">{formatMoney(r.total)}</div>
-                    {getSaldoPendiente(r) > 0 && (
+                    {!ocultarCobranzas && getSaldoPendiente(r) > 0 && (
                       <div className="text-[10px] font-black uppercase text-red-500">
                         Saldo {formatMoney(getSaldoPendiente(r))}
                       </div>

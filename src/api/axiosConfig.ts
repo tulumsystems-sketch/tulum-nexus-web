@@ -3,6 +3,7 @@ import axios, {
   AxiosError,
   AxiosResponse,
 } from "axios";
+import { clearSession } from "../utils/session";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080/api";
 const TOKEN_KEY = "token";
@@ -32,18 +33,14 @@ apiClient.interceptors.response.use(
   (response: AxiosResponse): AxiosResponse => response,
   (error: AxiosError): Promise<any> => {
     if (!error.response) return Promise.reject(error);
-    const statusCode = error.response.status;
-    const isUnauthorized = statusCode === 401 || statusCode === 403;
-    if (isUnauthorized) {
+    // 401 = sesión inválida. 403 = autenticado pero sin permiso (ej. preventista vs caja).
+    if (error.response.status === 401) {
       const currentPath = window.location.pathname;
       const token = localStorage.getItem('token');
       if (!token && currentPath !== '/login') {
         window.location.href = LOGIN_PATH;
       } else if (token && currentPath !== '/login') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('tenant');
-        localStorage.removeItem('rol');
-        localStorage.removeItem('email');
+        clearSession();
         window.location.href = LOGIN_PATH;
       }
     }

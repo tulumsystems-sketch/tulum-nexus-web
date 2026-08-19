@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
+import { IdleSessionGuard } from '../IdleSessionGuard';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -24,5 +25,5 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <>{children}</>;
+  return <IdleSessionGuard>{children}</IdleSessionGuard>;
 };

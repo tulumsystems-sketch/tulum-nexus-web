@@ -28,7 +28,7 @@ const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
 export const MonitorPedidosOnline: React.FC = () => {
   // Polling configurado a 30 segundos
-  const { data: ventas, error, mutate, isLoading } = useSWR('/ventas', fetcher, {
+  const { data: ventas, error, mutate, isLoading } = useSWR('/ventas/search?whatsapp=true&size=50&sort=fecha,desc', fetcher, {
     refreshInterval: 30000,
   });
 
@@ -75,9 +75,7 @@ export const MonitorPedidosOnline: React.FC = () => {
   }
 
   // Filtrar ventas por observaciones de WhatsApp
-  const pedidosWhatsApp = Array.isArray(ventas)
-    ? ventas.filter((v: Venta) => v.observaciones?.includes('Pedido automático vía WhatsApp'))
-    : [];
+  const pedidosWhatsApp = Array.isArray(ventas?.content) ? ventas.content : [];
 
   return (
     <div className="space-y-6">
