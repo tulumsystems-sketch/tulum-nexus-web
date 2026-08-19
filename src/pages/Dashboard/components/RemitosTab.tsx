@@ -7,6 +7,7 @@ import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { StatusPill } from '../../../components/ui/StatusPill';
 import { CobranzasPanel } from './remitos/CobranzasPanel';
+import { ProductoBuscador, ProductoBusqueda } from './remitos/ProductoBuscador';
 import {
   RemitoEstadoPago,
   descargarRemitoPdf,
@@ -28,14 +29,14 @@ interface RemitoItem {
   descripcion: string;
 }
 
-interface ProductoOption {
-  id: number;
-  nombre: string;
-  precio?: number;
-  cantidadStock?: number;
-}
-
 interface RemitoFormInputs {
+  clienteId: number | string;
+  direccionEntrega: string;
+  nombreDestinatario: string;
+  telefonoDestinatario: string;
+  observaciones: string;
+  items: RemitoItem[];
+}
   clienteId: number | string;
   direccionEntrega: string;
   nombreDestinatario: string;
@@ -74,10 +75,10 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
   const [isSubmittingRemito, setIsSubmittingRemito] = useState(false);
   const [descargandoId, setDescargandoId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [productosElegidos, setProductosElegidos] = useState<Record<number, ProductoBusqueda>>({});
 
   // Data fetching
   const { data: clientes } = useSWR('/clientes', fetcher);
-  const { data: productos } = useSWR('/productos', fetcher);
   const { data: remitos, mutate: mutateRemitos } = useSWR('/remitos', fetcher);
 
   const { register, control, handleSubmit, reset, watch, setValue } = useForm<RemitoFormInputs>({
@@ -93,8 +94,8 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
     `$${Number(value || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const getSelectedProducto = (productoId: number | string) => {
-    if (!Array.isArray(productos) || productoId === '') return null;
-    return productos.find((p: ProductoOption) => String(p.id) === String(productoId)) || null;
+    if (productoId === '') return null;
+    return Object.values(productosElegidos).find((p) => String(p.id) === String(productoId)) || null;
   };
 
   const getItemPrecio = (item?: RemitoItem) => Number(item ? getSelectedProducto(item.productoId)?.precio || 0 : 0);
@@ -137,6 +138,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
         }))
       });
       reset();
+      setProductosElegidos({});
       await mutateRemitos();
       setFeedback({ type: 'success', message: 'Remito creado correctamente.' });
     } catch (error: any) {
@@ -319,15 +321,19 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
                 <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50/50 p-4 rounded-xl border border-slate-100">
                   <div className="md:col-span-4">
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Producto</label>
-                    <select
-                      {...register(`items.${index}.productoId` as const)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
-                    >
-                      <option value="">Seleccionar...</option>
-                      {productos?.map((p: ProductoOption) => (
-                        <option key={p.id} value={p.id}>{p.nombre} - {formatMoney(p.precio)} - Stock: {p.cantidadStock ?? 0}</option>
-                      ))}
-                    </select>
+                    <ProductoBuscador
+                      value={watchedItems?.[index]?.productoId ?? ''}
+                      formatMoney={formatMoney}
+                      onSelect={(producto) => {
+                        setValue(`items.${index}.productoId`, producto ? producto.id : '');
+                        setProductosElegidos((prev) => {
+                          const next = { ...prev };
+                          if (producto) next[index] = producto;
+                          else delete next[index];
+                          return next;
+                        });
+                      }}
+                    />
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cant.</label>

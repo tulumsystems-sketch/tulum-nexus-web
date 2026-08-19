@@ -42,6 +42,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { SectionCard } from '../../components/ui/SectionCard';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { clearTenantFeaturesCache } from '../../hooks/useTenantFeatures';
+import { clearSession } from '../../utils/session';
 import {
   getMetodoPagoLabelCorto,
   getMetodosPagoHabilitados,
@@ -76,6 +77,9 @@ export const Dashboard: React.FC = () => {
   const [isHistorialCajasOpen, setIsHistorialCajasOpen] = useState(false);
   const [montoCierre, setMontoCierre] = useState<number | ''>('');
   const [isClosingCaja, setIsClosingCaja] = useState(false);
+  const [descargoMonto, setDescargoMonto] = useState<Record<number, string>>({});
+  const [descargoMotivo, setDescargoMotivo] = useState<Record<number, string>>({});
+  const [guardandoDescargoId, setGuardandoDescargoId] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
   const [productSearch, setProductSearch] = useState('');
@@ -87,7 +91,8 @@ export const Dashboard: React.FC = () => {
   const { data: categorias, error: errorCategorias, isLoading: isLoadingCategorias, mutate: mutateCategorias } = useSWR(token && !esPreventista ? '/categorias' : null, fetcher);
   const { data: productos, error: errorProductos, isLoading: isLoadingProductos, mutate: mutateProductos } = useSWR(token ? '/productos' : null, fetcher);
   const { data: clientes, error: errorClientes, isLoading: isLoadingClientes, mutate: mutateClientes } = useSWR(token ? '/clientes' : null, fetcher);
-  const { data: ventas, error: errorVentas, isLoading: isLoadingVentas, mutate: mutateVentas } = useSWR(token && !esPreventista ? '/ventas' : null, fetcher);
+  const { data: ventasTotales, mutate: mutateVentasTotales } = useSWR(token && !esPreventista ? '/ventas/stats/totales' : null, fetcher);
+  const { data: ventasRecientes, mutate: mutateVentasRecientes } = useSWR(token && !esPreventista ? '/ventas/search?page=0&size=15&sort=fecha,desc' : null, fetcher);
   
   // Configuración Global y Preferencias
   const { data: globalConfig } = useSWR(token ? '/config' : null, fetcher, {
@@ -103,8 +108,12 @@ export const Dashboard: React.FC = () => {
   const [filterEstado, setFilterEstado] = useState('');
   const [page, setPage] = useState(0);
 
-  const { data: ventasPaginadas } = useSWR(
-    token && !esPreventista ? `/ventas/search?page=${page}&size=10&desde=${filterDesde}&hasta=${filterHasta}&metodoPago=${filterMetodoPago}&estado=${filterEstado}` : null,
+  const { data: ventasPaginadas, mutate: mutateVentasPaginadas } = useSWR(
+    token && !esPreventista ? `/ventas/search?page=${page}&size=10&desde=${filterDesde}&hasta=${filterHasta}&metodoPago=${filterMetodoPago}&estado=${filterEstado}&sort=fecha,desc` : null,
+    fetcher
+  );
+  const { data: ventasCliente } = useSWR(
+    selectedClient ? `/ventas/search?clienteId=${selectedClient.id}&size=50&sort=fecha,desc` : null,
     fetcher
   );
 
@@ -118,17 +127,22 @@ export const Dashboard: React.FC = () => {
       setIsLoadingCaja(false);
       return;
     }
-    apiClient.get('/caja/estado')
-      .then(res => setCaja(res.data))
-      .catch(err => {
-        console.error("Error obteniendo estado de caja:", err);
-        setCaja(null);
-      })
-      .finally(() => setIsLoadingCaja(false));
+    const cargarCaja = () =>
+      apiClient.get('/caja/estado')
+        .then(res => setCaja(res.data))
+        .catch(err => {
+          console.error("Error obteniendo estado de caja:", err);
+          setCaja(null);
+        })
+        .finally(() => setIsLoadingCaja(false));
+
+    cargarCaja();
+    const timer = window.setInterval(cargarCaja, 60000);
+    return () => window.clearInterval(timer);
   }, [token, esPreventista]);
 
   // Historial de Cierres de Caja (solo carga cuando el modal está abierto)
-  const { data: historialCajas } = useSWR(
+  const { data: historialCajas, mutate: mutateHistorialCajas } = useSWR(
     isHistorialCajasOpen ? '/caja/historial' : null,
     fetcher
   );
@@ -139,10 +153,7 @@ export const Dashboard: React.FC = () => {
   }
 
   const handleLogout = (): void => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('tenant');
-    localStorage.removeItem('rol');
-    localStorage.removeItem('email');
+    clearSession();
     clearTenantFeaturesCache();
     navigate('/login', { replace: true });
   };
@@ -200,7 +211,9 @@ export const Dashboard: React.FC = () => {
     if (!window.confirm('¿Estás seguro de que deseas anular esta venta? El stock será devuelto.')) return;
     try {
       await apiClient.put(`/ventas/${id}/anular`);
-      await mutateVentas();
+      await mutateVentasRecientes();
+      await mutateVentasPaginadas();
+      await mutateVentasTotales();
       await mutateProductos();
       notify('success', 'Venta anulada y stock devuelto correctamente.');
     } catch (error: any) {
@@ -209,7 +222,24 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleImprimir = (venta: any) => imprimirTicket(venta, globalConfig);
+  const abrirArqueo = async () => {
+    try {
+      const stateRes = await apiClient.get('/caja/estado');
+      setCaja(stateRes.data);
+    } catch (error) {
+      console.error('Error obteniendo estado de caja:', error);
+    }
+    setIsClosingModalOpen(true);
+  };
+
+  const handleImprimir = async (venta: any) => {
+    try {
+      const res = await apiClient.get(`/ventas/${venta.id}`);
+      imprimirTicket(res.data, globalConfig);
+    } catch {
+      imprimirTicket(venta, globalConfig);
+    }
+  };
 
   const handleOpenCaja = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -257,8 +287,33 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const handleDescargo = async (cajaId: number) => {
+    const monto = Number(descargoMonto[cajaId]);
+    const motivo = (descargoMotivo[cajaId] || '').trim();
+    if (Number.isNaN(monto) || monto < 0) {
+      notify('error', 'Indicá el monto real de efectivo.');
+      return;
+    }
+    if (motivo.length < 8) {
+      notify('error', 'El descargo necesita un motivo (mínimo 8 caracteres).');
+      return;
+    }
+    setGuardandoDescargoId(cajaId);
+    try {
+      await apiClient.post(`/caja/${cajaId}/descargo`, { montoFinalReal: monto, motivo });
+      await mutateHistorialCajas();
+      setDescargoMonto((prev) => ({ ...prev, [cajaId]: '' }));
+      setDescargoMotivo((prev) => ({ ...prev, [cajaId]: '' }));
+      notify('success', 'Descargo registrado. La caja quedó ajustada.');
+    } catch (error: any) {
+      notify('error', error.response?.data?.message || 'No se pudo registrar el descargo.');
+    } finally {
+      setGuardandoDescargoId(null);
+    }
+  };
+
   // Loaders
-  if (isLoadingCaja || isLoadingCategorias || isLoadingProductos || isLoadingClientes || isLoadingVentas) {
+  if (isLoadingCaja || isLoadingCategorias || isLoadingProductos || isLoadingClientes) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-900">
         <div className="flex flex-col items-center">
@@ -273,7 +328,7 @@ export const Dashboard: React.FC = () => {
   }
 
   // Errors
-  if (errorCategorias || errorProductos || errorClientes || errorVentas) {
+  if (errorCategorias || errorProductos || errorClientes) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
         <div className="p-8 bg-white border border-red-100 rounded-2xl shadow-xl text-center max-w-md">
@@ -303,23 +358,19 @@ export const Dashboard: React.FC = () => {
   };
 
   // Cálculo de Métricas (Stat Cards) & Resumen de Caja
-  const totalVentas = Array.isArray(ventas) ? ventas.length : 0;
-  const ingresosTotales = Array.isArray(ventas) ? ventas.reduce((acc: number, v: any) => acc + (v.totalFinal || 0), 0) : 0;
-  const ticketPromedio = totalVentas > 0 ? ingresosTotales / totalVentas : 0;
+  const totalVentas = Number(ventasTotales?.cantidad || 0);
+  const ingresosTotales = Number(ventasTotales?.ingresos || 0);
+  const ticketPromedio = Number(ventasTotales?.ticketPromedio || (totalVentas > 0 ? ingresosTotales / totalVentas : 0));
 
-  // Cada método de pago se acumula por separado: sólo el efectivo entra al cajón.
-  const vendidoPorMetodo = (metodoPago: string) => Array.isArray(ventas)
-    ? ventas
-        .filter((v: any) => (v.metodoPago || 'EFECTIVO') === metodoPago && v.estado !== 'ANULADA')
-        .reduce((acc: number, v: any) => acc + (v.totalFinal || 0), 0)
-    : 0;
-
-  const vendidoEfectivo = vendidoPorMetodo('EFECTIVO');
-  const vendidoTransferencia = vendidoPorMetodo('TRANSFERENCIA');
-  const vendidoMP = vendidoPorMetodo('MERCADO_PAGO');
-  const cobranzasEfectivo = caja?.montoCobranzasEfectivo || 0;
-  const cobranzasTransferencia = caja?.montoCobranzasTransferencia || 0;
-  const totalEsperadoCaja = (caja?.montoInicial || 0) + vendidoEfectivo + cobranzasEfectivo;
+  // Caja del turno abierto: una sola fuente de verdad (buckets reconstruidos en el backend).
+  const vendidoEfectivo = Number(caja?.montoVentasEfectivo || 0);
+  const vendidoTransferencia = Number(caja?.montoVentasTransferencia || 0);
+  const vendidoMP = Number(caja?.montoVentasMP || 0);
+  const cobranzasEfectivo = Number(caja?.montoCobranzasEfectivo || 0);
+  const cobranzasTransferencia = Number(caja?.montoCobranzasTransferencia || 0);
+  const totalEsperadoCaja = Number(
+    caja?.montoFinalEsperado ?? ((caja?.montoInicial || 0) + vendidoEfectivo + cobranzasEfectivo)
+  );
 
   const filteredProducts = Array.isArray(productos) ? productos.filter((p: any) =>
     (p.nombre || '').toLowerCase().includes(productSearch.toLowerCase())
@@ -333,28 +384,16 @@ export const Dashboard: React.FC = () => {
     : 0;
   const formatMoney = (value: number | null | undefined) =>
     `$${Number(value || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const getUltimaCompraCliente = (cliente: any) => {
-    if (!cliente || !Array.isArray(ventas)) return null;
-    return ventas
-      .filter((venta: any) =>
-        String(venta.cliente?.id || venta.clienteId || '') === String(cliente.id) &&
-        venta.estado !== 'ANULADA'
-      )
-      .sort((a: any, b: any) => new Date(b.fecha || 0).getTime() - new Date(a.fecha || 0).getTime())[0] || null;
-  };
-  const selectedClientLastSale = selectedClient ? getUltimaCompraCliente(selectedClient) : null;
-  const ventasDelCliente = selectedClient && Array.isArray(ventas)
-    ? ventas.filter((venta: any) =>
-        String(venta.cliente?.id || venta.clienteId || '') === String(selectedClient.id) &&
-        venta.estado !== 'ANULADA'
-      )
+  const ventasDelCliente = Array.isArray(ventasCliente?.content)
+    ? ventasCliente.content.filter((venta: any) => venta.estado !== 'ANULADA')
     : [];
+  const selectedClientLastSale = ventasDelCliente[0] || null;
   const totalCompradoCliente = ventasDelCliente.reduce((acc: number, venta: any) => acc + Number(venta.totalFinal || 0), 0);
   const cajaAbierta = caja?.estado === 'ABIERTA';
   const cajaStatusMeta = esPreventista
     ? 'Preventista - pedidos y remitos, sin caja ni POS'
     : cajaAbierta
-      ? `Caja abierta - efectivo esperado $${totalEsperadoCaja.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      ? `Caja abierta (${caja.horasAbierta || 0}h / ${caja.limiteHoras || 24}h) - efectivo esperado $${totalEsperadoCaja.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : 'Caja cerrada - abri un turno para operar en efectivo';
 
   const handleTabChange = (tab: TabType) => {
@@ -595,7 +634,7 @@ export const Dashboard: React.FC = () => {
         <div className="p-6 border-t border-white/5 space-y-3">
           {puedeUsarPOS && (caja && caja.estado === 'ABIERTA' ? (
             <button
-              onClick={() => setIsClosingModalOpen(true)}
+              onClick={abrirArqueo}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-amber-500 transition-colors bg-amber-500/10 rounded-xl hover:bg-amber-500 hover:text-white"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
@@ -964,7 +1003,7 @@ export const Dashboard: React.FC = () => {
                 }
                 action={
                   esPreventista ? undefined : cajaAbierta ? (
-                    <AppButton variant="secondary" onClick={() => setIsClosingModalOpen(true)}>Cerrar caja</AppButton>
+                    <AppButton variant="secondary" onClick={abrirArqueo}>Cerrar caja</AppButton>
                   ) : (
                     <AppButton variant="success" onClick={() => setIsAperturaModalOpen(true)}>Abrir caja</AppButton>
                   )
@@ -1045,8 +1084,8 @@ export const Dashboard: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {Array.isArray(ventas) && ventas.length > 0 ? (
-                        ventas.map((col: any, index: number) => {
+                      {Array.isArray(ventasRecientes?.content) && ventasRecientes.content.length > 0 ? (
+                        ventasRecientes.content.map((col: any, index: number) => {
                           const clientName = col.cliente?.nombre 
                             ? `${col.cliente.nombre} ${col.cliente.apellido}` 
                             : (col.clienteId === 0 || !col.clienteId ? 'Consumidor Final' : `ID Cliente: ${col.clienteId}`);
@@ -1340,7 +1379,7 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Bloqueo de Caja - Solo preventista necesita turno abierto */}
+      {/* Modal de Bloqueo de Caja: el operador necesita turno abierto */}
       {!isLoadingCaja && isOperador && (!caja || caja.estado !== 'ABIERTA') && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
           <div className="w-full max-w-sm p-8 bg-white shadow-2xl rounded-2xl animate-in zoom-in-95 duration-300">
@@ -1434,10 +1473,12 @@ export const Dashboard: React.FC = () => {
                   <span className="font-mono font-bold">${cobranzasTransferencia.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center text-blue-600">
-                <span className="text-sm font-bold opacity-80">Vendido en Digital (MP):</span>
-                <span className="font-mono font-bold">${vendidoMP.toFixed(2)}</span>
-              </div>
+              {vendidoMP > 0 && (
+                <div className="flex justify-between items-center text-blue-600">
+                  <span className="text-sm font-bold opacity-80">Vendido en Digital (MP):</span>
+                  <span className="font-mono font-bold">${vendidoMP.toFixed(2)}</span>
+                </div>
+              )}
               <div className="border-t border-slate-200 pt-3 mt-3 flex justify-between items-center text-slate-800">
                 <span className="text-sm font-black uppercase tracking-wider">Total Esperado en Caja:</span>
                 <span className="font-mono font-black text-lg">${totalEsperadoCaja.toFixed(2)}</span>
@@ -1511,10 +1552,17 @@ export const Dashboard: React.FC = () => {
               ) : (
                 historialCajas.map((c: any) => (
                   <div key={c.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className={`text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${c.estado === 'ABIERTA' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                        {c.estado}
-                      </span>
+                    <div className="flex justify-between items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${c.estado === 'ABIERTA' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                          {c.estado}
+                        </span>
+                        {c.cierreAutomatico && (
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            Cierre automático
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[10px] font-bold text-slate-400">
                         {c.fechaApertura ? new Date(c.fechaApertura).toLocaleString() : '-'}
                         {c.fechaCierre ? ` → ${new Date(c.fechaCierre).toLocaleString()}` : ''}
@@ -1535,6 +1583,52 @@ export const Dashboard: React.FC = () => {
                         </div>
                       )}
                     </div>
+                    {c.motivoCierre && (
+                      <p className="text-[11px] font-medium text-slate-500 leading-relaxed">{c.motivoCierre}</p>
+                    )}
+                    {Array.isArray(c.descargos) && c.descargos.length > 0 && (
+                      <div className="space-y-1 border-t border-slate-200 pt-2">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Descargos</p>
+                        {c.descargos.map((d: any) => (
+                          <p key={d.id} className="text-[11px] font-semibold text-slate-600">
+                            {d.fecha ? new Date(d.fecha).toLocaleString() : ''} · ${(d.montoAnterior || 0).toFixed(2)} → ${(d.montoNuevo || 0).toFixed(2)}
+                            {d.diferencia != null ? ` (${d.diferencia > 0 ? '+' : ''}${Number(d.diferencia).toFixed(2)})` : ''}
+                            {' · '}{d.motivo}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    {c.estado === 'CERRADA' && (
+                      <div className="space-y-2 border-t border-slate-200 pt-3">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ajustar con descargo</p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Monto real $"
+                            value={descargoMonto[c.id] ?? ''}
+                            onChange={(e) => setDescargoMonto((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                            className="flex-1 px-3 py-2 text-sm font-bold bg-white border border-slate-200 rounded-lg text-slate-800"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Motivo del ajuste"
+                            value={descargoMotivo[c.id] ?? ''}
+                            onChange={(e) => setDescargoMotivo((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                            className="flex-[2] px-3 py-2 text-sm font-semibold bg-white border border-slate-200 rounded-lg text-slate-800"
+                          />
+                          <button
+                            type="button"
+                            disabled={guardandoDescargoId === c.id}
+                            onClick={() => handleDescargo(c.id)}
+                            className="px-3 py-2 text-xs font-black uppercase tracking-wide text-white bg-slate-800 rounded-lg hover:bg-slate-900 disabled:opacity-50"
+                          >
+                            {guardandoDescargoId === c.id ? 'Guardando...' : 'Descargo'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
