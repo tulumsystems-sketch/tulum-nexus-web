@@ -242,12 +242,17 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
     }
   };
 
+  const inputClass = (hasError?: boolean) =>
+    `w-full px-4 py-3 text-base text-slate-700 bg-slate-50 border rounded-xl focus:outline-none focus:ring-2 transition-colors ${
+      hasError ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+    }`;
+
   return (
-    <div className="w-full p-4 sm:p-6 mb-8 bg-white border border-gray-100 rounded-xl shadow-sm transition-all duration-300 hover:shadow-md">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-slate-800">{initialData ? 'Editar Producto' : 'Crear Nuevo Producto'}</h2>
+    <div className="w-full p-6 sm:p-8 mb-2 bg-white border border-gray-100 rounded-2xl shadow-sm">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-2xl font-black text-slate-800">{initialData ? 'Editar Producto' : 'Crear Nuevo Producto'}</h2>
         {initialData && (
-          <button type="button" onClick={onCancelEdit} className="text-sm font-semibold text-slate-400 hover:text-slate-600">
+          <button type="button" onClick={onCancelEdit} className="text-sm font-semibold text-slate-400 hover:text-slate-200">
             Cancelar Edición
           </button>
         )}
@@ -265,31 +270,25 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
-        
-        {/* Fila 1 */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Nombre del Producto *</label>
+            <label className="block mb-2 text-sm font-bold text-slate-200">Nombre del Producto *</label>
             <input
               type="text"
               {...register('nombre')}
-              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                errors.nombre ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-              }`}
-              placeholder="Ej. Silla Ergonómica"
+              className={inputClass(Boolean(errors.nombre))}
+              placeholder="Ej. Jamón cocido paladini"
               disabled={isSubmitting}
             />
-            {errors.nombre && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.nombre.message}</p>}
+            {errors.nombre && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.nombre.message}</p>}
           </div>
 
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Categoría *</label>
+            <label className="block mb-2 text-sm font-bold text-slate-200">Categoría *</label>
             <select
               {...register('categoriaId')}
-              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                errors.categoriaId ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-              }`}
+              className={inputClass(Boolean(errors.categoriaId))}
               disabled={isSubmitting || isLoadingCategorias}
             >
               <option value="">
@@ -301,30 +300,29 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
                 </option>
               ))}
             </select>
-            {errors.categoriaId && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.categoriaId.message}</p>}
+            {errors.categoriaId && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.categoriaId.message}</p>}
           </div>
         </div>
 
-        {/* Fila 2: Descripción y URL Imagen */}
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Imagen del Producto</label>
-            <div className="flex items-start gap-4">
-              <label className={`flex-1 flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+            <label className="block mb-2 text-sm font-bold text-slate-200">Imagen del Producto</label>
+            <div className="flex items-stretch gap-4">
+              <label className={`flex-1 min-h-[140px] flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${
                 previewUrl ? 'border-indigo-400 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-500' : 'border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-400'
               }`}>
                 <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isSubmitting || isUploading} />
-                <svg className={`w-8 h-8 mb-2 ${previewUrl ? 'text-indigo-500' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2-2v12a2 2 0 002 2z"></path></svg>
-                <span className={`text-sm font-bold ${previewUrl ? 'text-indigo-700' : 'text-slate-600'}`}>
+                <svg className={`w-10 h-10 mb-2 ${previewUrl ? 'text-indigo-500' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2-2v12a2 2 0 002 2z"></path></svg>
+                <span className={`text-base font-bold ${previewUrl ? 'text-indigo-300' : 'text-slate-200'}`}>
                   {previewUrl ? 'Cambiar Imagen' : 'Subir Imagen'}
                 </span>
-                <span className="text-xs text-slate-400 mt-1 text-center">Formato JPG, PNG, WebP</span>
+                <span className="text-sm text-slate-400 mt-1 text-center">JPG, PNG o WebP</span>
               </label>
 
               {previewUrl && (
-                <div className="relative w-24 h-24 rounded-xl overflow-hidden border-2 border-slate-200 flex-shrink-0 bg-slate-100 shadow-sm group">
+                <div className="relative w-36 h-36 rounded-2xl overflow-hidden border-2 border-slate-200 flex-shrink-0 bg-slate-100 shadow-sm group">
                   <img src={previewUrl} alt="Preview" className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                  <button type="button" onClick={clearFile} disabled={isSubmitting || isUploading} className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1 hover:bg-red-50 hover:text-red-600 transition-colors shadow-sm focus:outline-none">
+                  <button type="button" onClick={clearFile} disabled={isSubmitting || isUploading} className="absolute top-2 right-2 bg-white/90 text-red-500 rounded-full p-1.5 hover:bg-red-50 hover:text-red-600 transition-colors shadow-sm focus:outline-none">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
                   </button>
                 </div>
@@ -333,17 +331,15 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
           
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Descripción</label>
+            <label className="block mb-2 text-sm font-bold text-slate-200">Descripción</label>
             <textarea
               {...register('descripcion')}
-              rows={2}
-              className={`w-full px-4 py-2 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                errors.descripcion ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-              }`}
+              rows={5}
+              className={`${inputClass(Boolean(errors.descripcion))} min-h-[140px] resize-y`}
                placeholder="Detalles acerca del producto..."
                disabled={isSubmitting}
             />
-            {errors.descripcion && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.descripcion.message}</p>}
+            {errors.descripcion && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.descripcion.message}</p>}
           </div>
         </div>
 
@@ -355,46 +351,42 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Precio de Costo</label>
+            <label className="block mb-2 text-sm font-bold text-slate-200">Precio de Costo</label>
             <div className="relative">
-              <span className="absolute left-3 top-2.5 text-slate-400 font-medium">$</span>
+              <span className="absolute left-3 top-3.5 text-slate-400 font-medium">$</span>
               <input
                 type="number"
                 step="0.01"
                 {...register('precioCosto', { onChange: () => setPrecioPisado(false) })}
-                className={`w-full pl-8 pr-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                  errors.precioCosto ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-                }`}
+                className={`${inputClass(Boolean(errors.precioCosto))} pl-8`}
                 placeholder="0.00"
                 disabled={isSubmitting}
               />
             </div>
             {errors.precioCosto
-              ? <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.precioCosto.message}</p>
-              : <p className="mt-1 text-xs text-slate-400">Lo que te cuesta el producto.</p>}
+              ? <p className="mt-1.5 text-sm font-medium text-red-400">{errors.precioCosto.message}</p>
+              : <p className="mt-1.5 text-sm text-slate-400">Lo que te cuesta el producto.</p>}
           </div>
 
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Margen (%)</label>
+            <label className="block mb-2 text-sm font-bold text-slate-200">Margen (%)</label>
             <div className="relative">
               <input
                 type="number"
                 step="0.01"
                 {...register('margenPorcentaje', { onChange: () => setPrecioPisado(false) })}
-                className={`w-full px-4 py-2.5 pr-9 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                  errors.margenPorcentaje ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-                }`}
+                className={`${inputClass(Boolean(errors.margenPorcentaje))} pr-9`}
                 placeholder={usaMargenAutomatico ? String(margenPorDefecto) : 'Sin margen'}
                 disabled={isSubmitting}
               />
-              <span className="absolute right-3 top-2.5 text-slate-400 font-medium">%</span>
+              <span className="absolute right-3 top-3.5 text-slate-400 font-medium">%</span>
             </div>
             {errors.margenPorcentaje
-              ? <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.margenPorcentaje.message}</p>
+              ? <p className="mt-1.5 text-sm font-medium text-red-400">{errors.margenPorcentaje.message}</p>
               : (
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1.5 text-sm text-slate-400">
                   {usaMargenAutomatico
                     ? `Vacío usa el ${margenPorDefecto}% configurado para el negocio.`
                     : 'Sin margen configurado: cargá el precio de venta a mano.'}
@@ -403,32 +395,30 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
 
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Precio de Venta *</label>
+            <label className="block mb-2 text-sm font-bold text-slate-200">Precio de Venta *</label>
             <div className="relative">
-              <span className="absolute left-3 top-2.5 text-slate-400 font-medium">$</span>
+              <span className="absolute left-3 top-3.5 text-slate-400 font-medium">$</span>
               <input
                 type="number"
                 step="0.01"
                 {...register('precio', { onChange: () => setPrecioPisado(true) })}
-                className={`w-full pl-8 pr-4 py-2.5 font-bold text-slate-800 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                  errors.precio ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-                }`}
+                className={`${inputClass(Boolean(errors.precio))} pl-8 font-bold`}
                 placeholder="0.00"
                 disabled={isSubmitting}
               />
             </div>
-            {errors.precio && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.precio.message}</p>}
+            {errors.precio && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.precio.message}</p>}
             {!errors.precio && precioSugerido !== null && (
               precioPisado ? (
                 <button
                   type="button"
                   onClick={() => setPrecioPisado(false)}
-                  className="mt-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                  className="mt-1.5 text-sm font-bold text-indigo-400 hover:text-indigo-200 hover:underline"
                 >
                   Recalcular con el margen: ${precioSugerido.toFixed(2)}
                 </button>
               ) : (
-                <p className="mt-1 text-xs font-semibold text-emerald-600">
+                <p className="mt-1.5 text-sm font-semibold text-emerald-400">
                   Calculado con {margenAplicado}% sobre el costo. Podés editarlo.
                 </p>
               )
@@ -436,58 +426,51 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
         </div>
 
-        {/* Fila 4: Stock, Stock Minimo y Medidas */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">
+            <label className="block mb-2 text-sm font-bold text-slate-200">
               Stock *{unidadCategoria ? <span className="ml-1 font-normal text-slate-400">(en {unidadCategoria})</span> : null}
             </label>
             <input
               type="number"
               {...register('cantidadStock')}
-              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                errors.cantidadStock ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-              }`}
+              className={inputClass(Boolean(errors.cantidadStock))}
               placeholder="0"
               disabled={isSubmitting}
             />
-            {errors.cantidadStock && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.cantidadStock.message}</p>}
+            {errors.cantidadStock && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.cantidadStock.message}</p>}
           </div>
 
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Stock Mínimo</label>
+            <label className="block mb-2 text-sm font-bold text-slate-200">Stock Mínimo</label>
             <input
               type="number"
               {...register('stockMinimo')}
-              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                errors.stockMinimo ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-              }`}
+              className={inputClass(Boolean(errors.stockMinimo))}
               placeholder="0"
               disabled={isSubmitting}
             />
-            {errors.stockMinimo && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.stockMinimo.message}</p>}
+            {errors.stockMinimo && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.stockMinimo.message}</p>}
           </div>
 
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Medidas</label>
+            <label className="block mb-2 text-sm font-bold text-slate-200">Medidas</label>
             <input
               type="text"
               {...register('medidas')}
-              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                errors.medidas ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-              }`}
+              className={inputClass(Boolean(errors.medidas))}
               placeholder="Ej. 10x20x30 cm"
               disabled={isSubmitting}
             />
-            {errors.medidas && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.medidas.message}</p>}
+            {errors.medidas && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.medidas.message}</p>}
           </div>
         </div>
 
-        <div className="flex justify-end pt-4 mt-2 border-t border-slate-100">
+        <div className="flex justify-end pt-6 mt-2 border-t border-slate-700">
           <button
             type="submit"
             disabled={isSubmitting || isUploading}
-            className={`flex items-center gap-2 px-6 py-2.5 font-bold text-white transition-all rounded-lg shadow disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`flex items-center gap-2 px-8 py-3 text-base font-bold text-white transition-all rounded-xl shadow disabled:opacity-50 disabled:cursor-not-allowed ${
               isUploading ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md'
             }`}
           >

@@ -51,12 +51,14 @@ export const Login: React.FC = () => {
         password: data.password,
       });
 
-      const { token, rol, tenant, email } = response.data;
+      const { token, rol, tenant, email, inactividadMinutos } = response.data;
 
       localStorage.setItem('token', token);
       localStorage.setItem('tenant', tenant);
       localStorage.setItem('rol', rol);
       localStorage.setItem('email', email);
+      localStorage.setItem('inactividadMinutos', String(inactividadMinutos || 30));
+      localStorage.setItem('tulum_last_activity', String(Date.now()));
 
       navigate(rol === 'SUPER_ADMIN' ? '/admin' : '/dashboard');
     } catch (err: any) {

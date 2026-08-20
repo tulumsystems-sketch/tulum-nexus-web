@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form';
-import { Download, Truck } from 'lucide-react';
+import { Download, Pencil, Truck, X } from 'lucide-react';
 import apiClient from '../../../api/axiosConfig';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { StatusPill } from '../../../components/ui/StatusPill';
 import { CobranzasPanel } from './remitos/CobranzasPanel';
+import { ProductoBuscador, ProductoBusqueda } from './remitos/ProductoBuscador';
+import { RemitoItemsResumen } from './remitos/RemitoItemsResumen';
+import { formatCantidadInput, parseCantidad } from '../../../utils/cantidad';
+import { getSufijoUnidad, getUnidadDeProducto } from '../../../utils/unidadMedida';
 import {
   RemitoEstadoPago,
   descargarRemitoPdf,
@@ -18,21 +22,16 @@ import {
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
+const ITEM_VACIO = { productoId: '' as number | string, cantidad: '1', descripcion: '' };
+
 type RemitoStatus = 'PENDIENTE' | 'EN_VIAJE' | 'ENTREGADO' | 'INCIDENCIA';
 
 type VistaRemitos = 'operacion' | 'cobranzas';
 
 interface RemitoItem {
   productoId: number | string;
-  cantidad: number;
+  cantidad: number | string;
   descripcion: string;
-}
-
-interface ProductoOption {
-  id: number;
-  nombre: string;
-  precio?: number;
-  cantidadStock?: number;
 }
 
 interface RemitoFormInputs {
@@ -47,7 +46,7 @@ interface RemitoFormInputs {
 interface Remito {
   id: number;
   nroRemito: string;
-  cliente?: { nombre: string; apellido: string };
+  cliente?: { id?: number; nombre: string; apellido: string; googleMapsUrl?: string };
   direccionEntrega: string;
   nombreDestinatario: string;
   telefonoDestinatario: string;
@@ -60,7 +59,14 @@ interface Remito {
     descripcion: string;
     precioUnitario?: number;
     totalLinea?: number;
-    producto?: { nombre: string; precio?: number };
+    producto?: {
+      id?: number;
+      nombre: string;
+      precio?: number;
+      cantidadStock?: number;
+      categoria?: { unidadMedida?: string };
+      unidadMedida?: string;
+    };
   }>;
   total?: number;
   estadoPago?: RemitoEstadoPago;
@@ -74,15 +80,22 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
   const [isSubmittingRemito, setIsSubmittingRemito] = useState(false);
   const [descargandoId, setDescargandoId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [productosElegidos, setProductosElegidos] = useState<Record<number, ProductoBusqueda>>({});
+  const [editingRemitoId, setEditingRemitoId] = useState<number | null>(null);
+  const [itemsExpandidos, setItemsExpandidos] = useState<Record<number, boolean>>({});
+  const formSectionRef = useRef<HTMLElement>(null);
 
-  // Data fetching
   const { data: clientes } = useSWR('/clientes', fetcher);
-  const { data: productos } = useSWR('/productos', fetcher);
   const { data: remitos, mutate: mutateRemitos } = useSWR('/remitos', fetcher);
 
   const { register, control, handleSubmit, reset, watch, setValue } = useForm<RemitoFormInputs>({
     defaultValues: {
-      items: [{ productoId: '', cantidad: 1, descripcion: '' }]
+      clienteId: '',
+      direccionEntrega: '',
+      nombreDestinatario: '',
+      telefonoDestinatario: '',
+      observaciones: '',
+      items: [{ ...ITEM_VACIO }],
     }
   });
 
@@ -93,12 +106,12 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
     `$${Number(value || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const getSelectedProducto = (productoId: number | string) => {
-    if (!Array.isArray(productos) || productoId === '') return null;
-    return productos.find((p: ProductoOption) => String(p.id) === String(productoId)) || null;
+    if (productoId === '') return null;
+    return Object.values(productosElegidos).find((p) => String(p.id) === String(productoId)) || null;
   };
 
   const getItemPrecio = (item?: RemitoItem) => Number(item ? getSelectedProducto(item.productoId)?.precio || 0 : 0);
-  const getItemSubtotal = (item?: RemitoItem) => getItemPrecio(item) * Number(item?.cantidad || 0);
+  const getItemSubtotal = (item?: RemitoItem) => getItemPrecio(item) * parseCantidad(item?.cantidad);
   const remitoPreviewTotal = Array.isArray(watchedItems)
     ? watchedItems.reduce((acc, item) => acc + getItemSubtotal(item), 0)
     : 0;
@@ -116,31 +129,107 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
 
   const { fields, append, remove } = useFieldArray({
     control,
-    name: "items"
+    name: 'items'
   });
 
   React.useEffect(() => {
     if (ocultarCobranzas) setVista('operacion');
   }, [ocultarCobranzas]);
 
+  const limpiarFormulario = () => {
+    setEditingRemitoId(null);
+    setProductosElegidos({});
+    reset({
+      clienteId: '',
+      direccionEntrega: '',
+      nombreDestinatario: '',
+      telefonoDestinatario: '',
+      observaciones: '',
+      items: [{ ...ITEM_VACIO }],
+    });
+  };
+
+  const cargarParaEditar = (remito: Remito) => {
+    const elegidos: Record<number, ProductoBusqueda> = {};
+    const items = (remito.items || []).map((item, index) => {
+      if (item.producto?.id) {
+        elegidos[index] = {
+          id: item.producto.id,
+          nombre: item.producto.nombre,
+          precio: item.precioUnitario ?? item.producto.precio,
+          cantidadStock: item.producto.cantidadStock,
+          categoria: item.producto.categoria,
+        };
+      }
+      return {
+        productoId: item.producto?.id ?? '',
+        cantidad: formatCantidadInput(item.cantidad),
+        descripcion: item.descripcion || '',
+      };
+    });
+
+    setEditingRemitoId(remito.id);
+    setProductosElegidos(elegidos);
+    setVista('operacion');
+    reset({
+      clienteId: remito.cliente?.id ?? '',
+      direccionEntrega: remito.direccionEntrega || '',
+      nombreDestinatario: remito.nombreDestinatario || '',
+      telefonoDestinatario: remito.telefonoDestinatario || '',
+      observaciones: remito.observaciones || '',
+      items: items.length ? items : [{ ...ITEM_VACIO }],
+    });
+
+    window.setTimeout(() => {
+      formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
   const onSubmit: SubmitHandler<RemitoFormInputs> = async (data) => {
     setIsSubmittingRemito(true);
     setFeedback(null);
     try {
-      await apiClient.post('/remitos', {
+      const items = data.items.map((item) => ({
+        productoId: item.productoId === '' ? null : Number(item.productoId),
+        cantidad: parseCantidad(item.cantidad),
+        descripcion: item.descripcion,
+      }));
+
+      if (items.length === 0) {
+        setFeedback({ type: 'error', message: 'El remito debe tener al menos un ítem.' });
+        return;
+      }
+
+      if (items.some((item) => item.cantidad <= 0)) {
+        setFeedback({
+          type: 'error',
+          message: 'Todas las cantidades deben ser mayores a cero. Para kg usá coma o punto, por ejemplo 5,830.',
+        });
+        return;
+      }
+
+      const payload = {
         ...data,
         clienteId: data.clienteId === '' ? null : Number(data.clienteId),
-        items: data.items.map(item => ({
-          ...item,
-          productoId: item.productoId === '' ? null : Number(item.productoId),
-          cantidad: Number(item.cantidad)
-        }))
-      });
-      reset();
+        items,
+      };
+
+      if (editingRemitoId) {
+        await apiClient.put(`/remitos/${editingRemitoId}`, payload);
+        setFeedback({ type: 'success', message: 'Remito actualizado correctamente.' });
+      } else {
+        await apiClient.post('/remitos', payload);
+        setFeedback({ type: 'success', message: 'Remito creado correctamente.' });
+      }
+
+      limpiarFormulario();
       await mutateRemitos();
-      setFeedback({ type: 'success', message: 'Remito creado correctamente.' });
     } catch (error: any) {
-      setFeedback({ type: 'error', message: 'Error al crear el remito: ' + (error.response?.data?.message || 'Error desconocido') });
+      const accion = editingRemitoId ? 'actualizar' : 'crear';
+      setFeedback({
+        type: 'error',
+        message: `Error al ${accion} el remito: ` + (error.response?.data?.message || 'Error desconocido'),
+      });
     } finally {
       setIsSubmittingRemito(false);
     }
@@ -190,14 +279,14 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
     switch (status) {
       case 'PENDIENTE': return 'bg-amber-100 text-amber-700 border-amber-200';
       case 'EN_VIAJE': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'ENTREGADO': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      case 'ENTREGADO': return 'bg-emerald-100 text-emerald-700 border-emerald-100';
       case 'INCIDENCIA': return 'bg-red-100 text-red-700 border-red-200';
       default: return 'bg-slate-100 text-slate-700';
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+    <div className="max-w-[1600px] mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <PageHeader
         eyebrow="Logistica"
         title="Remitos y hojas de ruta"
@@ -243,14 +332,31 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
         <CobranzasPanel remitos={remitosList} onRemitosActualizados={mutateRemitos} />
       ) : (
         <>
-      {/* SECCIÓN 1: FORMULARIO DE CREACIÓN */}
-      <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-b border-slate-200">
-          <h3 className="text-xl font-bold text-slate-800">Generar Nuevo Remito</h3>
-          <p className="text-sm text-slate-500 mt-1">Completa los datos de envío y carga los productos de la hoja de ruta.</p>
+      <section ref={formSectionRef} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-visible">
+        <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-b border-slate-200 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold text-slate-800">
+              {editingRemitoId ? 'Editar remito' : 'Generar Nuevo Remito'}
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">
+              {editingRemitoId
+                ? 'Corregí kilos, productos o datos de entrega y guardá. Acepta 5,830 o 5.830.'
+                : 'Completa los datos de envío y carga los productos de la hoja de ruta. Para fiambres usá kg con coma o punto.'}
+            </p>
+          </div>
+          {editingRemitoId && (
+            <button
+              type="button"
+              onClick={limpiarFormulario}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black uppercase text-slate-500 hover:bg-slate-100"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancelar edición
+            </button>
+          )}
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="p-4 sm:p-6 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="lg:col-span-1">
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Cliente</label>
@@ -303,94 +409,119 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h4 className="text-sm font-black text-slate-700 uppercase tracking-tighter">Ítems del Remito</h4>
+            <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+              <div>
+                <h4 className="text-base font-black text-slate-100 uppercase tracking-wide">
+                  Ítems del remito
+                  <span className="ml-2 rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-black text-slate-300">
+                    {fields.length}
+                  </span>
+                </h4>
+                <p className="mt-1 text-sm font-semibold text-slate-400">Kg con coma o punto: 5,830</p>
+              </div>
               <button
                 type="button"
-                onClick={() => append({ productoId: '', cantidad: 1, descripcion: '' })}
-                className="px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-all border border-blue-100"
+                onClick={() => append({ ...ITEM_VACIO })}
+                className="px-4 py-2.5 text-sm font-bold text-blue-300 bg-blue-500/10 rounded-xl hover:bg-blue-600 hover:text-white transition-all border border-blue-500/30"
               >
-                + Agregar Producto
+                + Producto
               </button>
             </div>
 
             <div className="space-y-3">
               {fields.map((field, index) => (
-                <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                  <div className="md:col-span-4">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Producto</label>
-                    <select
-                      {...register(`items.${index}.productoId` as const)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
-                    >
-                      <option value="">Seleccionar...</option>
-                      {productos?.map((p: ProductoOption) => (
-                        <option key={p.id} value={p.id}>{p.nombre} - {formatMoney(p.precio)} - Stock: {p.cantidadStock ?? 0}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cant.</label>
-                    <input
-                      type="number"
-                      {...register(`items.${index}.cantidad` as const, { valueAsNumber: true })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
+                <div key={field.id} className="grid grid-cols-12 gap-3 items-end bg-slate-50/80 px-3 py-3 rounded-xl border border-slate-100">
+                  <div className="col-span-12 lg:col-span-5">
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Producto</label>
+                    <ProductoBuscador
+                      value={watchedItems?.[index]?.productoId ?? ''}
+                      productoSeleccionado={productosElegidos[index] ?? null}
+                      formatMoney={formatMoney}
+                      onSelect={(producto) => {
+                        setValue(`items.${index}.productoId`, producto ? producto.id : '');
+                        setProductosElegidos((prev) => {
+                          const next = { ...prev };
+                          if (producto) next[index] = producto;
+                          else delete next[index];
+                          return next;
+                        });
+                      }}
                     />
                   </div>
-                  <div className="md:col-span-3">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Variedad</label>
+                  <div className="col-span-5 sm:col-span-4 lg:col-span-2">
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                      Cantidad
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        placeholder="5,830"
+                        {...register(`items.${index}.cantidad` as const)}
+                        className="w-full px-3 py-2.5 pr-12 bg-white border border-slate-200 rounded-xl text-base font-bold text-slate-700 outline-none"
+                        aria-label="Cantidad"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">
+                        {getSufijoUnidad(getUnidadDeProducto(productosElegidos[index]))}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="col-span-7 sm:col-span-5 lg:col-span-3">
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Variedad</label>
                     <input
                       {...register(`items.${index}.descripcion` as const)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
-                      placeholder="Ej: Color azul, talle L..."
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-base font-bold text-slate-700 outline-none"
+                      placeholder="Variedad (opcional)"
                     />
                   </div>
-                  <div className="md:col-span-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Precio</label>
-                    <div className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-right text-xs font-black text-slate-700">
-                      {formatMoney(getItemPrecio(watchedItems?.[index]))}
-                    </div>
+                  <div className="col-span-9 sm:col-span-2 lg:col-span-1 pb-1 text-right text-base font-black text-emerald-400 tabular-nums">
+                    {formatMoney(getItemSubtotal(watchedItems?.[index]))}
                   </div>
-                  <div className="md:col-span-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Total</label>
-                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-2 text-right text-xs font-black text-emerald-700">
-                      {formatMoney(getItemSubtotal(watchedItems?.[index]))}
-                    </div>
-                  </div>
-                  <div className="md:col-span-1">
+                  <div className="col-span-3 sm:col-span-1">
                     <button
                       type="button"
                       onClick={() => remove(index)}
-                      className="w-full p-2 text-red-400 hover:text-red-600 bg-red-50 rounded-lg transition-colors border border-red-100 flex items-center justify-center"
+                      className="w-full p-2.5 text-red-400 hover:text-red-600 bg-red-50 rounded-xl border border-red-100 flex items-center justify-center"
                       title="Quitar ítem"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="flex justify-end">
-              <div className="rounded-2xl border border-slate-200 bg-slate-900 px-5 py-4 text-right shadow-lg shadow-slate-200">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total del remito</div>
-                <div className="mt-1 text-2xl font-black text-white">{formatMoney(remitoPreviewTotal)}</div>
-              </div>
-            </div>
           </div>
 
-          <div className="flex justify-end pt-4">
-            <button
-              type="submit"
-              disabled={isSubmittingRemito}
-              className="px-10 py-3 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 disabled:opacity-50 flex items-center gap-2"
-            >
-              {isSubmittingRemito ? 'Generando...' : 'Crear Remito Oficial'}
-            </button>
+          <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="rounded-2xl border border-slate-200 bg-slate-900 px-5 py-4 text-right shadow-lg shadow-slate-200 sm:min-w-[220px]">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total del remito</div>
+              <div className="mt-1 text-2xl font-black text-white">{formatMoney(remitoPreviewTotal)}</div>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              {editingRemitoId && (
+                <button
+                  type="button"
+                  onClick={limpiarFormulario}
+                  className="px-6 py-3 bg-white text-slate-600 font-black rounded-xl border border-slate-200 hover:bg-slate-50 transition-all"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={isSubmittingRemito}
+                className="px-10 py-3 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSubmittingRemito
+                  ? (editingRemitoId ? 'Guardando...' : 'Generando...')
+                  : (editingRemitoId ? 'Guardar cambios' : 'Crear Remito Oficial')}
+              </button>
+            </div>
           </div>
         </form>
       </section>
 
-      {/* SECCIÓN 2: LISTADO DE REMITOS */}
       <section className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -416,7 +547,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRemitos.length > 0 ? filteredRemitos.map((r: Remito) => (
-            <div key={r.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div key={r.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="space-y-4">
                 <div className="flex justify-between items-start">
                   <div>
@@ -452,51 +583,44 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
                     {r.direccionEntrega}
                   </p>
                   {r.telefonoDestinatario && <p className="text-xs font-medium text-slate-400">Móvil: {r.telefonoDestinatario}</p>}
-                  {(r as any).cliente?.googleMapsUrl && (
+                  {r.cliente?.googleMapsUrl && (
                     <a
-                      href={(r as any).cliente.googleMapsUrl}
+                      href={r.cliente.googleMapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 mt-1 transition-colors"
                     >
-                      🗺️ Ver Ubicación Google Maps
+                      Ver ubicación en Google Maps
                     </a>
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-slate-50">
-                  <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Ítems:</p>
-                  <ul className="space-y-1 text-xs">
-                    {r.items.map(item => (
-                      <li key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-slate-600">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="font-bold text-slate-800">
-                              <span className="font-black mr-1">{item.cantidad}x</span>
-                              {item.producto?.nombre || 'Producto'}
-                            </div>
-                            {item.descripcion && <div className="text-[10px] italic text-slate-400 truncate">{item.descripcion}</div>}
-                          </div>
-                          <div className="text-right tabular-nums">
-                            <div className="text-[10px] font-bold text-slate-400">{formatMoney(item.precioUnitario)} c/u</div>
-                            <div className="font-black text-emerald-700">{formatMoney(item.totalLinea)}</div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <RemitoItemsResumen
+                  items={r.items}
+                  expandido={Boolean(itemsExpandidos[r.id])}
+                  onToggle={() => setItemsExpandidos((prev) => ({ ...prev, [r.id]: !prev[r.id] }))}
+                  formatMoney={formatMoney}
+                />
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-100 space-y-2">
-                <button
-                  onClick={() => descargarPdf(r)}
-                  disabled={descargandoId === r.id}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-black uppercase bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition-colors disabled:opacity-50"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  {descargandoId === r.id ? 'Generando PDF...' : 'Descargar remito PDF'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => cargarParaEditar(r)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-black uppercase bg-white text-slate-700 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => descargarPdf(r)}
+                    disabled={descargandoId === r.id}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-black uppercase bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition-colors disabled:opacity-50"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {descargandoId === r.id ? 'PDF...' : 'PDF'}
+                  </button>
+                </div>
 
                 <div className="flex gap-2">
                 {r.estado === 'PENDIENTE' && (

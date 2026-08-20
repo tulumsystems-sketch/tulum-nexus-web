@@ -12,7 +12,8 @@ import { clearTenantFeaturesCache } from '../../hooks/useTenantFeatures';
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
 const getRoleLabel = (rol: string) => {
-  if (rol === 'OPERADOR') return 'Preventista';
+  if (rol === 'OPERADOR') return 'Operador (Caja)';
+  if (rol === 'PREVENTISTA') return 'Preventista';
   if (rol === 'ADMIN') return 'Administrador';
   if (rol === 'SUPER_ADMIN') return 'Super Admin';
   return rol;
@@ -23,6 +24,15 @@ interface TenantConfig {
   tenantId: string;
   nombreEmpresa?: string;
   activo: boolean;
+  ivaPorcentaje?: number;
+  pagoEfectivoHabilitado?: boolean;
+  pagoTransferenciaHabilitado?: boolean;
+  pagoMercadoPagoHabilitado?: boolean;
+  aliasCobro?: string;
+  clientesHabilitado?: boolean;
+  remitosHabilitado?: boolean;
+  comprasHabilitado?: boolean;
+  stockHabilitado?: boolean;
 }
 
 interface TenantFeature {
@@ -55,6 +65,15 @@ export const SuperAdminPanel: React.FC = () => {
     nombreEmpresa: '',
     adminEmail: '',
     adminPassword: '',
+    ivaPorcentaje: 21,
+    pagoEfectivoHabilitado: true,
+    pagoTransferenciaHabilitado: false,
+    pagoMercadoPagoHabilitado: false,
+    clientesHabilitado: true,
+    remitosHabilitado: true,
+    comprasHabilitado: true,
+    stockHabilitado: true,
+    aliasCobro: '',
   });
 
   const effectiveTenantId = selectedTenantId || tenants[0]?.tenantId || '';
@@ -184,6 +203,15 @@ export const SuperAdminPanel: React.FC = () => {
         nombreEmpresa: createForm.nombreEmpresa.trim(),
         adminEmail: createForm.adminEmail.trim(),
         adminPassword: createForm.adminPassword,
+        ivaPorcentaje: Number(createForm.ivaPorcentaje),
+        pagoEfectivoHabilitado: createForm.pagoEfectivoHabilitado,
+        pagoTransferenciaHabilitado: createForm.pagoTransferenciaHabilitado,
+        pagoMercadoPagoHabilitado: createForm.pagoMercadoPagoHabilitado,
+        clientesHabilitado: createForm.clientesHabilitado,
+        remitosHabilitado: createForm.remitosHabilitado,
+        comprasHabilitado: createForm.comprasHabilitado,
+        stockHabilitado: createForm.stockHabilitado,
+        aliasCobro: createForm.aliasCobro.trim() || null,
       });
 
       await mutate();
@@ -194,6 +222,15 @@ export const SuperAdminPanel: React.FC = () => {
         nombreEmpresa: '',
         adminEmail: '',
         adminPassword: '',
+        ivaPorcentaje: 21,
+        pagoEfectivoHabilitado: true,
+        pagoTransferenciaHabilitado: false,
+        pagoMercadoPagoHabilitado: false,
+        clientesHabilitado: true,
+        remitosHabilitado: true,
+        comprasHabilitado: true,
+        stockHabilitado: true,
+        aliasCobro: '',
       });
 
       setFeedback({
@@ -449,6 +486,53 @@ export const SuperAdminPanel: React.FC = () => {
                     </label>
                   </div>
                 </div>
+
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+                    <div className="text-sm font-black text-white mb-2">IVA en ticket</div>
+                    <select
+                      value={tenantConfigData?.ivaPorcentaje ?? 21}
+                      onChange={async (e) => {
+                        if (!effectiveTenantId || !tenantConfigData) return;
+                        setSavingModule('ivaPorcentaje');
+                        try {
+                          await apiClient.put(`/admin/tenants/${effectiveTenantId}/config`, {
+                            ...tenantConfigData,
+                            ivaPorcentaje: Number(e.target.value),
+                          });
+                          await mutateTenantConfig();
+                        } finally {
+                          setSavingModule(null);
+                        }
+                      }}
+                      disabled={savingModule === 'ivaPorcentaje'}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white"
+                    >
+                      <option value={0}>0% (no discrimina IVA)</option>
+                      <option value={10.5}>10.5%</option>
+                      <option value={21}>21%</option>
+                    </select>
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 space-y-2">
+                    <div className="text-sm font-black text-white">Medios de pago en el POS</div>
+                    {[
+                      ['pagoEfectivoHabilitado', 'Efectivo'],
+                      ['pagoTransferenciaHabilitado', 'Transferencia'],
+                      ['pagoMercadoPagoHabilitado', 'Mercado Pago'],
+                    ].map(([key, label]) => (
+                      <label key={key} className="flex items-center justify-between text-sm text-slate-300">
+                        <span>{label}</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(tenantConfigData?.[key] ?? (key === 'pagoEfectivoHabilitado'))}
+                          onChange={() => toggleTenantModule(key, Boolean(tenantConfigData?.[key] ?? (key === 'pagoEfectivoHabilitado')))}
+                          disabled={savingModule === key}
+                          className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* Usuarios del Tenant */}
@@ -517,7 +601,7 @@ export const SuperAdminPanel: React.FC = () => {
       {/* MODAL CREAR NUEVO TENANT */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative animate-in zoom-in-95 duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setIsCreateModalOpen(false)}
               className="absolute top-6 right-6 text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition-colors"
@@ -531,7 +615,7 @@ export const SuperAdminPanel: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-xl font-black text-white">Crear Nueva Empresa / Tenant</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Genera el tenant y su cuenta de administrador inicial.</p>
+                <p className="text-xs text-slate-400 mt-0.5">Paquete comercial + admin inicial. El comercio no se da de alta solo.</p>
               </div>
             </div>
 
@@ -545,10 +629,12 @@ export const SuperAdminPanel: React.FC = () => {
                   required
                   placeholder="ej: distribuidora-bebidas"
                   value={createForm.tenantId}
-                  onChange={(e) => setCreateForm({ ...createForm, tenantId: e.target.value })}
+                  pattern="[a-z0-9][a-z0-9_-]{2,40}"
+                  title="Minusculas, numeros, guion o guion bajo. 3 a 41 caracteres."
+                  onChange={(e) => setCreateForm({ ...createForm, tenantId: e.target.value.toLowerCase() })}
                   className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-medium font-mono"
                 />
-                <p className="text-[11px] text-slate-500 mt-1">Solo letras minúsculas, números y guiones. Sin espacios.</p>
+                <p className="text-[11px] text-slate-500 mt-1">3 a 41 caracteres: minúsculas, números, guion o guion bajo. Sin espacios.</p>
               </div>
 
               <div>
@@ -563,6 +649,79 @@ export const SuperAdminPanel: React.FC = () => {
                   onChange={(e) => setCreateForm({ ...createForm, nombreEmpresa: e.target.value })}
                   className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-medium"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                    IVA *
+                  </label>
+                  <select
+                    value={createForm.ivaPorcentaje}
+                    onChange={(e) => setCreateForm({ ...createForm, ivaPorcentaje: Number(e.target.value) })}
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm font-medium"
+                  >
+                    <option value={0}>0% (no discrimina)</option>
+                    <option value={10.5}>10.5%</option>
+                    <option value={21}>21%</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                    Alias / CBU (si cobra transferencia)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="alias.comercio"
+                    value={createForm.aliasCobro}
+                    onChange={(e) => setCreateForm({ ...createForm, aliasCobro: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-600 text-sm font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-2">
+                  <p className="text-xs font-black uppercase tracking-wider text-slate-400">Medios de pago</p>
+                  <label className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Efectivo</span>
+                    <input type="checkbox" checked={createForm.pagoEfectivoHabilitado} onChange={(e) => setCreateForm({ ...createForm, pagoEfectivoHabilitado: e.target.checked })} />
+                  </label>
+                  <label className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Transferencia</span>
+                    <input type="checkbox" checked={createForm.pagoTransferenciaHabilitado} onChange={(e) => setCreateForm({ ...createForm, pagoTransferenciaHabilitado: e.target.checked })} />
+                  </label>
+                  <label className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Mercado Pago</span>
+                    <input type="checkbox" checked={createForm.pagoMercadoPagoHabilitado} onChange={(e) => setCreateForm({ ...createForm, pagoMercadoPagoHabilitado: e.target.checked })} />
+                  </label>
+                </div>
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-2">
+                  <p className="text-xs font-black uppercase tracking-wider text-slate-400">Modulos</p>
+                  <label className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Clientes</span>
+                    <input type="checkbox" checked={createForm.clientesHabilitado} onChange={(e) => setCreateForm({ ...createForm, clientesHabilitado: e.target.checked })} />
+                  </label>
+                  <label className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Remitos</span>
+                    <input type="checkbox" checked={createForm.remitosHabilitado} onChange={(e) => setCreateForm({ ...createForm, remitosHabilitado: e.target.checked })} />
+                  </label>
+                  <label className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Compras</span>
+                    <input type="checkbox" checked={createForm.comprasHabilitado} onChange={(e) => setCreateForm({ ...createForm, comprasHabilitado: e.target.checked })} />
+                  </label>
+                  <label className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Stock</span>
+                    <input type="checkbox" checked={createForm.stockHabilitado} onChange={(e) => setCreateForm({ ...createForm, stockHabilitado: e.target.checked })} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-slate-300 space-y-1">
+                <p className="font-black uppercase tracking-wider text-emerald-400">Entrega al comercio</p>
+                <p>1. Pedir: nombre, slug, email admin, password temporal, IVA, medios de pago, módulos.</p>
+                <p>2. Cargar acá y crear. El comercio queda activo.</p>
+                <p>3. Entregar: URL de la app, slug (empresa), email y password. Ellos no salen de su tenant.</p>
               </div>
 
               <div className="border-t border-slate-800 pt-4 mt-2">
@@ -592,8 +751,8 @@ export const SuperAdminPanel: React.FC = () => {
                     <input
                       type="password"
                       required
-                      minLength={6}
-                      placeholder="••••••••"
+                      minLength={8}
+                      placeholder="Minimo 8 caracteres"
                       value={createForm.adminPassword}
                       onChange={(e) => setCreateForm({ ...createForm, adminPassword: e.target.value })}
                       className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-medium"

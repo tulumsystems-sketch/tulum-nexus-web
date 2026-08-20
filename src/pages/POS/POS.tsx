@@ -87,7 +87,9 @@ export const POS: React.FC = () => {
 
 
   // SWR: Estado de la caja
-  const { data: cajaEstado, isLoading: isLoadingCaja } = useSWR('/caja/estado', fetcher);
+  const { data: cajaEstado, isLoading: isLoadingCaja } = useSWR('/caja/estado', fetcher, {
+    refreshInterval: 60000,
+  });
 
   // SWR: Búsqueda de productos
   const { data: productos, isLoading: isLoadingProductos } = useSWR(
@@ -277,7 +279,9 @@ export const POS: React.FC = () => {
              <Clock className="w-8 h-8" />
            </div>
            <h2 className="text-xl font-black mb-2 tracking-tight">Turno Cerrado</h2>
-           <p className="text-slate-400 text-sm mb-6 leading-relaxed">Debe abrir caja desde el Dashboard para operar en el POS.</p>
+           <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+             Abrí un turno desde el Dashboard para vender. A las 24 horas la caja se cierra sola; si hay que ajustar el efectivo, se hace con un descargo.
+           </p>
            <button 
              onClick={() => navigate('/dashboard')}
              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/20"

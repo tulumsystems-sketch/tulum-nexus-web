@@ -41,7 +41,7 @@ interface CreateUserInputs {
 const userSchema = yup.object().shape({
   email: yup.string().email('Debe ser un correo válido').required('El correo es obligatorio'),
   password: yup.string().required('La contraseña es obligatoria').min(6, 'Debe tener al menos 6 caracteres'),
-  rol: yup.string().required('El rol es obligatorio'),
+  rol: yup.string().oneOf(ROLES_ASIGNABLES, 'Rol invalido').required('El rol es obligatorio'),
 });
 
 export const UsuariosTab: React.FC = () => {
