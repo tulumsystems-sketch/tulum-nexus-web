@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import apiClient from '../../../../api/axiosConfig';
+import { formatCantidad } from '../../../../utils/cantidad';
 
 export interface ProductoBusqueda {
   id: number;
@@ -14,11 +15,12 @@ export interface ProductoBusqueda {
 
 interface ProductoBuscadorProps {
   value: number | string;
+  productoSeleccionado?: ProductoBusqueda | null;
   onSelect: (producto: ProductoBusqueda | null) => void;
   formatMoney: (value: number | null | undefined) => string;
 }
 
-export const ProductoBuscador: React.FC<ProductoBuscadorProps> = ({ value, onSelect, formatMoney }) => {
+export const ProductoBuscador: React.FC<ProductoBuscadorProps> = ({ value, productoSeleccionado, onSelect, formatMoney }) => {
   const [query, setQuery] = useState('');
   const [abierto, setAbierto] = useState(false);
   const [resultados, setResultados] = useState<ProductoBusqueda[]>([]);
@@ -30,8 +32,13 @@ export const ProductoBuscador: React.FC<ProductoBuscadorProps> = ({ value, onSel
     if (value === '' || value == null) {
       setSeleccionado(null);
       setQuery('');
+      return;
     }
-  }, [value]);
+    if (productoSeleccionado && String(productoSeleccionado.id) === String(value)) {
+      setSeleccionado(productoSeleccionado);
+      setQuery(productoSeleccionado.nombre);
+    }
+  }, [value, productoSeleccionado]);
 
   useEffect(() => {
     const texto = query.trim();
@@ -113,7 +120,7 @@ export const ProductoBuscador: React.FC<ProductoBuscadorProps> = ({ value, onSel
             >
               <span className="text-xs font-black text-slate-800">{etiqueta(producto)}</span>
               <span className="text-[10px] font-bold text-slate-400">
-                {formatMoney(producto.precio)} · Stock {producto.cantidadStock ?? 0}
+                {formatMoney(producto.precio)} · Stock {formatCantidad(producto.cantidadStock)}
               </span>
             </button>
           ))}

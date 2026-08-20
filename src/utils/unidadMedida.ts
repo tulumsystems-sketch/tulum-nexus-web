@@ -1,8 +1,8 @@
 /**
  * Unidad de medida de una categoría.
  *
- * Es sólo una etiqueta para acompañar las cantidades: el stock, las ventas y los
- * remitos siguen manejando cantidades enteras.
+ * Es una etiqueta para acompañar las cantidades. Los remitos y el stock
+ * aceptan decimales (kg de fiambres, por ejemplo 5,830).
  */
 
 export const UNIDAD_POR_DEFECTO = 'UNIDAD';
@@ -34,5 +34,10 @@ export const getSufijoUnidad = (unidadMedida?: string | null): string => {
 export const getUnidadDeProducto = (producto: any): string =>
   producto?.categoria?.unidadMedida || producto?.unidadMedida || UNIDAD_POR_DEFECTO;
 
-export const formatCantidad = (cantidad: number | null | undefined, unidadMedida?: string | null): string =>
-  `${Number(cantidad ?? 0)} ${getSufijoUnidad(unidadMedida)}`;
+export const formatCantidad = (cantidad: number | null | undefined, unidadMedida?: string | null): string => {
+  const n = Number(cantidad ?? 0);
+  const texto = Number.isFinite(n)
+    ? n.toLocaleString('es-AR', { maximumFractionDigits: 3 })
+    : '0';
+  return `${texto} ${getSufijoUnidad(unidadMedida)}`;
+};

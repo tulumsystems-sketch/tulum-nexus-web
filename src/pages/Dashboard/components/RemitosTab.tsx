@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form';
-import { Download, Truck } from 'lucide-react';
+import { Download, Pencil, Truck, X } from 'lucide-react';
 import apiClient from '../../../api/axiosConfig';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { StatusPill } from '../../../components/ui/StatusPill';
 import { CobranzasPanel } from './remitos/CobranzasPanel';
 import { ProductoBuscador, ProductoBusqueda } from './remitos/ProductoBuscador';
+import { RemitoItemsResumen } from './remitos/RemitoItemsResumen';
+import { formatCantidadInput, parseCantidad } from '../../../utils/cantidad';
 import {
   RemitoEstadoPago,
   descargarRemitoPdf,
@@ -19,13 +21,15 @@ import {
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
+const ITEM_VACIO = { productoId: '' as number | string, cantidad: '1', descripcion: '' };
+
 type RemitoStatus = 'PENDIENTE' | 'EN_VIAJE' | 'ENTREGADO' | 'INCIDENCIA';
 
 type VistaRemitos = 'operacion' | 'cobranzas';
 
 interface RemitoItem {
   productoId: number | string;
-  cantidad: number;
+  cantidad: number | string;
   descripcion: string;
 }
 
@@ -37,18 +41,11 @@ interface RemitoFormInputs {
   observaciones: string;
   items: RemitoItem[];
 }
-  clienteId: number | string;
-  direccionEntrega: string;
-  nombreDestinatario: string;
-  telefonoDestinatario: string;
-  observaciones: string;
-  items: RemitoItem[];
-}
 
 interface Remito {
   id: number;
   nroRemito: string;
-  cliente?: { nombre: string; apellido: string };
+  cliente?: { id?: number; nombre: string; apellido: string; googleMapsUrl?: string };
   direccionEntrega: string;
   nombreDestinatario: string;
   telefonoDestinatario: string;
@@ -61,7 +58,7 @@ interface Remito {
     descripcion: string;
     precioUnitario?: number;
     totalLinea?: number;
-    producto?: { nombre: string; precio?: number };
+    producto?: { id?: number; nombre: string; precio?: number; cantidadStock?: number };
   }>;
   total?: number;
   estadoPago?: RemitoEstadoPago;
@@ -76,14 +73,21 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
   const [descargandoId, setDescargandoId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [productosElegidos, setProductosElegidos] = useState<Record<number, ProductoBusqueda>>({});
+  const [editingRemitoId, setEditingRemitoId] = useState<number | null>(null);
+  const [itemsExpandidos, setItemsExpandidos] = useState<Record<number, boolean>>({});
+  const formSectionRef = useRef<HTMLElement>(null);
 
-  // Data fetching
   const { data: clientes } = useSWR('/clientes', fetcher);
   const { data: remitos, mutate: mutateRemitos } = useSWR('/remitos', fetcher);
 
   const { register, control, handleSubmit, reset, watch, setValue } = useForm<RemitoFormInputs>({
     defaultValues: {
-      items: [{ productoId: '', cantidad: 1, descripcion: '' }]
+      clienteId: '',
+      direccionEntrega: '',
+      nombreDestinatario: '',
+      telefonoDestinatario: '',
+      observaciones: '',
+      items: [{ ...ITEM_VACIO }],
     }
   });
 
@@ -99,7 +103,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
   };
 
   const getItemPrecio = (item?: RemitoItem) => Number(item ? getSelectedProducto(item.productoId)?.precio || 0 : 0);
-  const getItemSubtotal = (item?: RemitoItem) => getItemPrecio(item) * Number(item?.cantidad || 0);
+  const getItemSubtotal = (item?: RemitoItem) => getItemPrecio(item) * parseCantidad(item?.cantidad);
   const remitoPreviewTotal = Array.isArray(watchedItems)
     ? watchedItems.reduce((acc, item) => acc + getItemSubtotal(item), 0)
     : 0;
@@ -117,32 +121,106 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
 
   const { fields, append, remove } = useFieldArray({
     control,
-    name: "items"
+    name: 'items'
   });
 
   React.useEffect(() => {
     if (ocultarCobranzas) setVista('operacion');
   }, [ocultarCobranzas]);
 
+  const limpiarFormulario = () => {
+    setEditingRemitoId(null);
+    setProductosElegidos({});
+    reset({
+      clienteId: '',
+      direccionEntrega: '',
+      nombreDestinatario: '',
+      telefonoDestinatario: '',
+      observaciones: '',
+      items: [{ ...ITEM_VACIO }],
+    });
+  };
+
+  const cargarParaEditar = (remito: Remito) => {
+    const elegidos: Record<number, ProductoBusqueda> = {};
+    const items = (remito.items || []).map((item, index) => {
+      if (item.producto?.id) {
+        elegidos[index] = {
+          id: item.producto.id,
+          nombre: item.producto.nombre,
+          precio: item.precioUnitario ?? item.producto.precio,
+          cantidadStock: item.producto.cantidadStock,
+        };
+      }
+      return {
+        productoId: item.producto?.id ?? '',
+        cantidad: formatCantidadInput(item.cantidad),
+        descripcion: item.descripcion || '',
+      };
+    });
+
+    setEditingRemitoId(remito.id);
+    setProductosElegidos(elegidos);
+    setVista('operacion');
+    reset({
+      clienteId: remito.cliente?.id ?? '',
+      direccionEntrega: remito.direccionEntrega || '',
+      nombreDestinatario: remito.nombreDestinatario || '',
+      telefonoDestinatario: remito.telefonoDestinatario || '',
+      observaciones: remito.observaciones || '',
+      items: items.length ? items : [{ ...ITEM_VACIO }],
+    });
+
+    window.setTimeout(() => {
+      formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
   const onSubmit: SubmitHandler<RemitoFormInputs> = async (data) => {
     setIsSubmittingRemito(true);
     setFeedback(null);
     try {
-      await apiClient.post('/remitos', {
+      const items = data.items.map((item) => ({
+        productoId: item.productoId === '' ? null : Number(item.productoId),
+        cantidad: parseCantidad(item.cantidad),
+        descripcion: item.descripcion,
+      }));
+
+      if (items.length === 0) {
+        setFeedback({ type: 'error', message: 'El remito debe tener al menos un ítem.' });
+        return;
+      }
+
+      if (items.some((item) => item.cantidad <= 0)) {
+        setFeedback({
+          type: 'error',
+          message: 'Todas las cantidades deben ser mayores a cero. Para kg usá coma o punto, por ejemplo 5,830.',
+        });
+        return;
+      }
+
+      const payload = {
         ...data,
         clienteId: data.clienteId === '' ? null : Number(data.clienteId),
-        items: data.items.map(item => ({
-          ...item,
-          productoId: item.productoId === '' ? null : Number(item.productoId),
-          cantidad: Number(item.cantidad)
-        }))
-      });
-      reset();
-      setProductosElegidos({});
+        items,
+      };
+
+      if (editingRemitoId) {
+        await apiClient.put(`/remitos/${editingRemitoId}`, payload);
+        setFeedback({ type: 'success', message: 'Remito actualizado correctamente.' });
+      } else {
+        await apiClient.post('/remitos', payload);
+        setFeedback({ type: 'success', message: 'Remito creado correctamente.' });
+      }
+
+      limpiarFormulario();
       await mutateRemitos();
-      setFeedback({ type: 'success', message: 'Remito creado correctamente.' });
     } catch (error: any) {
-      setFeedback({ type: 'error', message: 'Error al crear el remito: ' + (error.response?.data?.message || 'Error desconocido') });
+      const accion = editingRemitoId ? 'actualizar' : 'crear';
+      setFeedback({
+        type: 'error',
+        message: `Error al ${accion} el remito: ` + (error.response?.data?.message || 'Error desconocido'),
+      });
     } finally {
       setIsSubmittingRemito(false);
     }
@@ -192,7 +270,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
     switch (status) {
       case 'PENDIENTE': return 'bg-amber-100 text-amber-700 border-amber-200';
       case 'EN_VIAJE': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'ENTREGADO': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      case 'ENTREGADO': return 'bg-emerald-100 text-emerald-700 border-emerald-100';
       case 'INCIDENCIA': return 'bg-red-100 text-red-700 border-red-200';
       default: return 'bg-slate-100 text-slate-700';
     }
@@ -245,11 +323,28 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
         <CobranzasPanel remitos={remitosList} onRemitosActualizados={mutateRemitos} />
       ) : (
         <>
-      {/* SECCIÓN 1: FORMULARIO DE CREACIÓN */}
-      <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-b border-slate-200">
-          <h3 className="text-xl font-bold text-slate-800">Generar Nuevo Remito</h3>
-          <p className="text-sm text-slate-500 mt-1">Completa los datos de envío y carga los productos de la hoja de ruta.</p>
+      <section ref={formSectionRef} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-b border-slate-200 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold text-slate-800">
+              {editingRemitoId ? 'Editar remito' : 'Generar Nuevo Remito'}
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">
+              {editingRemitoId
+                ? 'Corregí kilos, productos o datos de entrega y guardá. Acepta 5,830 o 5.830.'
+                : 'Completa los datos de envío y carga los productos de la hoja de ruta. Para fiambres usá kg con coma o punto.'}
+            </p>
+          </div>
+          {editingRemitoId && (
+            <button
+              type="button"
+              onClick={limpiarFormulario}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black uppercase text-slate-500 hover:bg-slate-100"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancelar edición
+            </button>
+          )}
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="p-4 sm:p-8 space-y-6 sm:space-y-8">
@@ -306,23 +401,27 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
 
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h4 className="text-sm font-black text-slate-700 uppercase tracking-tighter">Ítems del Remito</h4>
+              <div>
+                <h4 className="text-sm font-black text-slate-700 uppercase tracking-tighter">Ítems del Remito</h4>
+                <p className="text-[11px] font-semibold text-slate-400">Cantidad en kg: 5,830 o 5.830</p>
+              </div>
               <button
                 type="button"
-                onClick={() => append({ productoId: '', cantidad: 1, descripcion: '' })}
+                onClick={() => append({ ...ITEM_VACIO })}
                 className="px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-all border border-blue-100"
               >
                 + Agregar Producto
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1">
               {fields.map((field, index) => (
-                <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/50 p-3 rounded-xl border border-slate-100">
                   <div className="md:col-span-4">
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Producto</label>
                     <ProductoBuscador
                       value={watchedItems?.[index]?.productoId ?? ''}
+                      productoSeleccionado={productosElegidos[index] ?? null}
                       formatMoney={formatMoney}
                       onSelect={(producto) => {
                         setValue(`items.${index}.productoId`, producto ? producto.id : '');
@@ -336,10 +435,13 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cant.</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cant. (kg)</label>
                     <input
-                      type="number"
-                      {...register(`items.${index}.cantidad` as const, { valueAsNumber: true })}
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="5,830"
+                      {...register(`items.${index}.cantidad` as const)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
                     />
                   </div>
@@ -376,27 +478,37 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
                 </div>
               ))}
             </div>
-            <div className="flex justify-end">
-              <div className="rounded-2xl border border-slate-200 bg-slate-900 px-5 py-4 text-right shadow-lg shadow-slate-200">
-                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total del remito</div>
-                <div className="mt-1 text-2xl font-black text-white">{formatMoney(remitoPreviewTotal)}</div>
-              </div>
-            </div>
           </div>
 
-          <div className="flex justify-end pt-4">
-            <button
-              type="submit"
-              disabled={isSubmittingRemito}
-              className="px-10 py-3 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 disabled:opacity-50 flex items-center gap-2"
-            >
-              {isSubmittingRemito ? 'Generando...' : 'Crear Remito Oficial'}
-            </button>
+          <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="rounded-2xl border border-slate-200 bg-slate-900 px-5 py-4 text-right shadow-lg shadow-slate-200 sm:min-w-[220px]">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total del remito</div>
+              <div className="mt-1 text-2xl font-black text-white">{formatMoney(remitoPreviewTotal)}</div>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              {editingRemitoId && (
+                <button
+                  type="button"
+                  onClick={limpiarFormulario}
+                  className="px-6 py-3 bg-white text-slate-600 font-black rounded-xl border border-slate-200 hover:bg-slate-50 transition-all"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={isSubmittingRemito}
+                className="px-10 py-3 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-900 transition-all shadow-lg shadow-slate-200 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSubmittingRemito
+                  ? (editingRemitoId ? 'Guardando...' : 'Generando...')
+                  : (editingRemitoId ? 'Guardar cambios' : 'Crear Remito Oficial')}
+              </button>
+            </div>
           </div>
         </form>
       </section>
 
-      {/* SECCIÓN 2: LISTADO DE REMITOS */}
       <section className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -458,51 +570,44 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
                     {r.direccionEntrega}
                   </p>
                   {r.telefonoDestinatario && <p className="text-xs font-medium text-slate-400">Móvil: {r.telefonoDestinatario}</p>}
-                  {(r as any).cliente?.googleMapsUrl && (
+                  {r.cliente?.googleMapsUrl && (
                     <a
-                      href={(r as any).cliente.googleMapsUrl}
+                      href={r.cliente.googleMapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 mt-1 transition-colors"
                     >
-                      🗺️ Ver Ubicación Google Maps
+                      Ver ubicación en Google Maps
                     </a>
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-slate-50">
-                  <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Ítems:</p>
-                  <ul className="space-y-1 text-xs">
-                    {r.items.map(item => (
-                      <li key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-slate-600">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="font-bold text-slate-800">
-                              <span className="font-black mr-1">{item.cantidad}x</span>
-                              {item.producto?.nombre || 'Producto'}
-                            </div>
-                            {item.descripcion && <div className="text-[10px] italic text-slate-400 truncate">{item.descripcion}</div>}
-                          </div>
-                          <div className="text-right tabular-nums">
-                            <div className="text-[10px] font-bold text-slate-400">{formatMoney(item.precioUnitario)} c/u</div>
-                            <div className="font-black text-emerald-700">{formatMoney(item.totalLinea)}</div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <RemitoItemsResumen
+                  items={r.items}
+                  expandido={Boolean(itemsExpandidos[r.id])}
+                  onToggle={() => setItemsExpandidos((prev) => ({ ...prev, [r.id]: !prev[r.id] }))}
+                  formatMoney={formatMoney}
+                />
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-100 space-y-2">
-                <button
-                  onClick={() => descargarPdf(r)}
-                  disabled={descargandoId === r.id}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-black uppercase bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition-colors disabled:opacity-50"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  {descargandoId === r.id ? 'Generando PDF...' : 'Descargar remito PDF'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => cargarParaEditar(r)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-black uppercase bg-white text-slate-700 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => descargarPdf(r)}
+                    disabled={descargandoId === r.id}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-black uppercase bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition-colors disabled:opacity-50"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {descargandoId === r.id ? 'PDF...' : 'PDF'}
+                  </button>
+                </div>
 
                 <div className="flex gap-2">
                 {r.estado === 'PENDIENTE' && (
