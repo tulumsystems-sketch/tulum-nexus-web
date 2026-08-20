@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import apiClient from '../../../../api/axiosConfig';
 import { formatCantidad } from '../../../../utils/cantidad';
+import { getSufijoUnidad, getUnidadDeProducto } from '../../../../utils/unidadMedida';
 
 export interface ProductoBusqueda {
   id: number;
@@ -10,7 +11,7 @@ export interface ProductoBusqueda {
   cantidadStock?: number;
   descripcion?: string;
   medidas?: string;
-  categoria?: { id?: number; nombre?: string };
+  categoria?: { id?: number; nombre?: string; unidadMedida?: string };
 }
 
 interface ProductoBuscadorProps {
@@ -80,7 +81,7 @@ export const ProductoBuscador: React.FC<ProductoBuscadorProps> = ({ value, produ
   return (
     <div ref={cajaRef} className="relative">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+        <Search className="pointer-events-none absolute left-3.5 top-3.5 h-5 w-5 text-slate-400" />
         <input
           type="text"
           value={abierto ? query : (seleccionado ? seleccionado.nombre : query)}
@@ -94,17 +95,17 @@ export const ProductoBuscador: React.FC<ProductoBuscadorProps> = ({ value, produ
           }}
           onFocus={() => setAbierto(true)}
           placeholder="Buscar por nombre, categoría o marca"
-          className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-xs font-bold text-slate-700 outline-none"
+          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-11 pr-3 text-base font-bold text-slate-700 outline-none"
         />
       </div>
       {abierto && (
-        <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+        <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
           {query.trim() === '' && (
-            <p className="px-3 py-2 text-[11px] font-semibold text-slate-400">Escribí nombre, categoría o marca.</p>
+            <p className="px-4 py-3 text-sm font-semibold text-slate-400">Escribí nombre, categoría o marca.</p>
           )}
-          {cargando && <p className="px-3 py-2 text-[11px] font-semibold text-slate-400">Buscando...</p>}
+          {cargando && <p className="px-4 py-3 text-sm font-semibold text-slate-400">Buscando...</p>}
           {!cargando && query.trim() !== '' && resultados.length === 0 && (
-            <p className="px-3 py-2 text-[11px] font-semibold text-slate-400">Sin resultados.</p>
+            <p className="px-4 py-3 text-sm font-semibold text-slate-400">Sin resultados.</p>
           )}
           {resultados.map((producto) => (
             <button
@@ -116,11 +117,11 @@ export const ProductoBuscador: React.FC<ProductoBuscadorProps> = ({ value, produ
                 setAbierto(false);
                 onSelect(producto);
               }}
-              className="flex w-full flex-col items-start gap-0.5 border-b border-slate-50 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50"
+              className="flex w-full flex-col items-start gap-0.5 border-b border-slate-50 px-4 py-3 text-left last:border-b-0 hover:bg-slate-50"
             >
-              <span className="text-xs font-black text-slate-800">{etiqueta(producto)}</span>
-              <span className="text-[10px] font-bold text-slate-400">
-                {formatMoney(producto.precio)} · Stock {formatCantidad(producto.cantidadStock)}
+              <span className="text-sm font-black text-slate-800">{etiqueta(producto)}</span>
+              <span className="text-xs font-bold text-slate-400">
+                {formatMoney(producto.precio)} · Stock {formatCantidad(producto.cantidadStock)} {getSufijoUnidad(getUnidadDeProducto(producto))}
               </span>
             </button>
           ))}

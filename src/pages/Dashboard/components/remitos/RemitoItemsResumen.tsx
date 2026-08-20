@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatCantidad } from '../../../../utils/cantidad';
+import { getSufijoUnidad, getUnidadDeProducto } from '../../../../utils/unidadMedida';
 
 export interface RemitoItemResumen {
   id?: number;
@@ -7,7 +8,11 @@ export interface RemitoItemResumen {
   descripcion?: string;
   precioUnitario?: number;
   totalLinea?: number;
-  producto?: { nombre?: string };
+  producto?: {
+    nombre?: string;
+    categoria?: { unidadMedida?: string };
+    unidadMedida?: string;
+  };
 }
 
 interface RemitoItemsResumenProps {
@@ -56,7 +61,9 @@ export const RemitoItemsResumen: React.FC<RemitoItemsResumenProps> = ({
           {visibles.map((item, index) => (
             <li key={item.id ?? index} className="flex items-baseline justify-between gap-2 rounded-lg px-2 py-1 text-slate-600 hover:bg-slate-50">
               <div className="min-w-0 truncate">
-                <span className="font-black text-slate-800">{formatCantidad(item.cantidad)}</span>
+                <span className="font-black text-slate-800">
+                  {formatCantidad(item.cantidad)} {getSufijoUnidad(getUnidadDeProducto(item.producto))}
+                </span>
                 <span className="mx-1 text-slate-300">×</span>
                 <span className="font-semibold text-slate-700">{item.producto?.nombre || 'Producto'}</span>
                 {item.descripcion && <span className="ml-1 italic text-slate-400">({item.descripcion})</span>}

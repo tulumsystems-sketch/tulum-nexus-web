@@ -700,7 +700,7 @@ export const Dashboard: React.FC = () => {
           
           {/* TAB: PRODUCTOS */}
           {activeTab === 'products' && (
-            <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="w-full max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PageHeader
                 eyebrow="Inventario comercial"
                 title="Catalogo de productos"
@@ -717,14 +717,14 @@ export const Dashboard: React.FC = () => {
                 }
                 action={!esPreventista ? <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Nuevo producto</AppButton> : undefined}
               />
-              {!esPreventista && (showProductForm || editingProduct) ? (
+              {!esPreventista && (showProductForm || editingProduct) && (
                 <div className="relative">
                   <button
                     onClick={() => { setShowProductForm(false); setEditingProduct(null); }}
-                    className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors mb-4"
+                    className="flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white transition-colors mb-4"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                    Volver a Productos
+                    Cerrar formulario
                   </button>
                   <CreateProductForm 
                     onProductCreated={() => { handleProductCreated(); setEditingProduct(null); setShowProductForm(false); }} 
@@ -732,8 +732,8 @@ export const Dashboard: React.FC = () => {
                     onCancelEdit={() => { setEditingProduct(null); setShowProductForm(false); }}
                   />
                 </div>
-              ) : (
-                <>
+              )}
+              <>
                   <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                     <div className="relative flex-1 max-w-xl">
                       <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
@@ -742,10 +742,10 @@ export const Dashboard: React.FC = () => {
                         placeholder="Buscar por nombre de producto..."
                         value={productSearch}
                         onChange={(e) => setProductSearch(e.target.value)}
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm font-bold text-slate-700 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-12 pr-4 text-base font-bold text-slate-700 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                       />
                     </div>
-                    {!esPreventista && (
+                    {!esPreventista && !showProductForm && !editingProduct && (
                       <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Agregar producto</AppButton>
                     )}
                   </div>
@@ -756,7 +756,7 @@ export const Dashboard: React.FC = () => {
                     action={<StatusPill label={`${filteredProducts.length} items`} tone="blue" />}
                   >
                     <div className="overflow-x-auto">
-                      <table className="min-w-full text-left text-sm text-slate-600">
+                      <table className="min-w-full text-left text-base text-slate-600">
                         <thead className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-400 font-black">
                           <tr>
                             <th className="px-6 py-4">Imagen</th>
@@ -769,29 +769,29 @@ export const Dashboard: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {filteredProducts.length > 0 ? filteredProducts.map((col: any, index: number) => (
-                             <tr key={col.id} className={`transition-colors hover:bg-blue-50/30 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
-                               <td className="px-6 py-3">
+                             <tr key={col.id} className={`transition-colors hover:bg-blue-50/30 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} ${editingProduct?.id === col.id ? 'ring-2 ring-inset ring-blue-500/40' : ''}`}>
+                               <td className="px-6 py-4">
                                   {col.imageUrl ? (
-                                    <img src={col.imageUrl} alt={col.nombre} className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shadow-sm bg-slate-50" />
+                                    <img src={col.imageUrl} alt={col.nombre} className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shadow-sm bg-slate-50" />
                                   ) : (
-                                    <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400">
-                                      <Package className="h-6 w-6" />
+                                    <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400">
+                                      <Package className="h-7 w-7" />
                                     </div>
                                   )}
                                </td>
                                <td className="px-6 py-4">
-                                 <div className="font-black text-slate-900">{col.nombre}</div>
-                                 {col.medidas && <div className="mt-1 text-xs font-semibold text-slate-400">{col.medidas}</div>}
+                                 <div className="text-base font-black text-slate-900 leading-snug">{col.nombre}</div>
+                                 {col.medidas && <div className="mt-1 text-sm font-semibold text-slate-400">{col.medidas}</div>}
                                </td>
                                <td className="px-6 py-4 font-medium text-slate-500">
-                                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{col.categoria?.nombre || `ID: ${col.categoriaId}`}</span>
+                                 <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-600">{col.categoria?.nombre || `ID: ${col.categoriaId}`}</span>
                                </td>
                                <td className="px-6 py-4 text-right">
-                                 <div className="font-black text-slate-900">${Number(col.precio).toFixed(2)}</div>
+                                 <div className="text-base font-black text-slate-900">${Number(col.precio).toFixed(2)}</div>
                                  {!esPreventista && (col.precioCosto != null ? (
-                                   <div className="mt-0.5 text-xs font-semibold text-slate-400">Costo ${Number(col.precioCosto).toFixed(2)}</div>
+                                   <div className="mt-0.5 text-sm font-semibold text-slate-400">Costo ${Number(col.precioCosto).toFixed(2)}</div>
                                  ) : (
-                                   <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700 border border-amber-200">
+                                   <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-black text-amber-700 border border-amber-200">
                                      <AlertTriangle className="h-3 w-3" />
                                      Sin costo
                                    </div>
@@ -812,14 +812,14 @@ export const Dashboard: React.FC = () => {
                                        setShowProductForm(true);
                                        window.scrollTo({ top: 0, behavior: 'smooth' });
                                      }}
-                                     className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                                     className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
                                      title="Editar Producto"
                                    >
                                      <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                    </button>
                                    <button
                                      onClick={() => handleDeleteProduct(col.id)}
-                                     className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                     className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
                                      title="Eliminar Producto"
                                    >
                                      <svg className="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -839,8 +839,7 @@ export const Dashboard: React.FC = () => {
                       </table>
                     </div>
                   </SectionCard>
-                </>
-              )}
+              </>
             </div>
           )}
 

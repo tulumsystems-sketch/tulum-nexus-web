@@ -10,6 +10,7 @@ import { CobranzasPanel } from './remitos/CobranzasPanel';
 import { ProductoBuscador, ProductoBusqueda } from './remitos/ProductoBuscador';
 import { RemitoItemsResumen } from './remitos/RemitoItemsResumen';
 import { formatCantidadInput, parseCantidad } from '../../../utils/cantidad';
+import { getSufijoUnidad, getUnidadDeProducto } from '../../../utils/unidadMedida';
 import {
   RemitoEstadoPago,
   descargarRemitoPdf,
@@ -58,7 +59,14 @@ interface Remito {
     descripcion: string;
     precioUnitario?: number;
     totalLinea?: number;
-    producto?: { id?: number; nombre: string; precio?: number; cantidadStock?: number };
+    producto?: {
+      id?: number;
+      nombre: string;
+      precio?: number;
+      cantidadStock?: number;
+      categoria?: { unidadMedida?: string };
+      unidadMedida?: string;
+    };
   }>;
   total?: number;
   estadoPago?: RemitoEstadoPago;
@@ -150,6 +158,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
           nombre: item.producto.nombre,
           precio: item.precioUnitario ?? item.producto.precio,
           cantidadStock: item.producto.cantidadStock,
+          categoria: item.producto.categoria,
         };
       }
       return {
@@ -277,7 +286,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+    <div className="max-w-[1600px] mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <PageHeader
         eyebrow="Logistica"
         title="Remitos y hojas de ruta"
@@ -323,7 +332,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
         <CobranzasPanel remitos={remitosList} onRemitosActualizados={mutateRemitos} />
       ) : (
         <>
-      <section ref={formSectionRef} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <section ref={formSectionRef} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-visible">
         <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-b border-slate-200 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-xl font-bold text-slate-800">
@@ -399,30 +408,31 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
             />
           </div>
 
-          <div className="space-y-2">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white pb-2">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-3">
               <div>
-                <h4 className="text-sm font-black text-slate-700 uppercase tracking-tighter">
+                <h4 className="text-base font-black text-slate-100 uppercase tracking-wide">
                   Ítems del remito
-                  <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">
+                  <span className="ml-2 rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-black text-slate-300">
                     {fields.length}
                   </span>
                 </h4>
-                <p className="text-[11px] font-semibold text-slate-400">Kg con coma o punto: 5,830</p>
+                <p className="mt-1 text-sm font-semibold text-slate-400">Kg con coma o punto: 5,830</p>
               </div>
               <button
                 type="button"
                 onClick={() => append({ ...ITEM_VACIO })}
-                className="px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-all border border-blue-100"
+                className="px-4 py-2.5 text-sm font-bold text-blue-300 bg-blue-500/10 rounded-xl hover:bg-blue-600 hover:text-white transition-all border border-blue-500/30"
               >
                 + Producto
               </button>
             </div>
 
-            <div className="max-h-[min(56vh,560px)] space-y-1.5 overflow-y-auto pr-1">
+            <div className="space-y-3">
               {fields.map((field, index) => (
-                <div key={field.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50/80 px-2 py-1.5 rounded-lg border border-slate-100">
-                  <div className="col-span-12 md:col-span-5">
+                <div key={field.id} className="grid grid-cols-12 gap-3 items-end bg-slate-50/80 px-3 py-3 rounded-xl border border-slate-100">
+                  <div className="col-span-12 lg:col-span-5">
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Producto</label>
                     <ProductoBuscador
                       value={watchedItems?.[index]?.productoId ?? ''}
                       productoSeleccionado={productosElegidos[index] ?? null}
@@ -438,35 +448,44 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
                       }}
                     />
                   </div>
-                  <div className="col-span-4 md:col-span-2">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      placeholder="5,830 kg"
-                      {...register(`items.${index}.cantidad` as const)}
-                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
-                      aria-label="Cantidad en kg"
-                    />
+                  <div className="col-span-5 sm:col-span-4 lg:col-span-2">
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                      Cantidad
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        placeholder="5,830"
+                        {...register(`items.${index}.cantidad` as const)}
+                        className="w-full px-3 py-2.5 pr-12 bg-white border border-slate-200 rounded-xl text-base font-bold text-slate-700 outline-none"
+                        aria-label="Cantidad"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">
+                        {getSufijoUnidad(getUnidadDeProducto(productosElegidos[index]))}
+                      </span>
+                    </div>
                   </div>
-                  <div className="col-span-8 md:col-span-3">
+                  <div className="col-span-7 sm:col-span-5 lg:col-span-3">
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Variedad</label>
                     <input
                       {...register(`items.${index}.descripcion` as const)}
-                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-base font-bold text-slate-700 outline-none"
                       placeholder="Variedad (opcional)"
                     />
                   </div>
-                  <div className="col-span-10 md:col-span-1 text-right text-[11px] font-black text-emerald-700 tabular-nums">
+                  <div className="col-span-9 sm:col-span-2 lg:col-span-1 pb-1 text-right text-base font-black text-emerald-400 tabular-nums">
                     {formatMoney(getItemSubtotal(watchedItems?.[index]))}
                   </div>
-                  <div className="col-span-2 md:col-span-1">
+                  <div className="col-span-3 sm:col-span-1">
                     <button
                       type="button"
                       onClick={() => remove(index)}
-                      className="w-full p-1.5 text-red-400 hover:text-red-600 bg-red-50 rounded-lg border border-red-100 flex items-center justify-center"
+                      className="w-full p-2.5 text-red-400 hover:text-red-600 bg-red-50 rounded-xl border border-red-100 flex items-center justify-center"
                       title="Quitar ítem"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                   </div>
                 </div>
