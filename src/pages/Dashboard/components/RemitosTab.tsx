@@ -347,7 +347,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
           )}
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="p-4 sm:p-6 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="lg:col-span-1">
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Cliente</label>
@@ -399,26 +399,30 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
             />
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <div className="space-y-2">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white pb-2">
               <div>
-                <h4 className="text-sm font-black text-slate-700 uppercase tracking-tighter">Ítems del Remito</h4>
-                <p className="text-[11px] font-semibold text-slate-400">Cantidad en kg: 5,830 o 5.830</p>
+                <h4 className="text-sm font-black text-slate-700 uppercase tracking-tighter">
+                  Ítems del remito
+                  <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">
+                    {fields.length}
+                  </span>
+                </h4>
+                <p className="text-[11px] font-semibold text-slate-400">Kg con coma o punto: 5,830</p>
               </div>
               <button
                 type="button"
                 onClick={() => append({ ...ITEM_VACIO })}
                 className="px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-all border border-blue-100"
               >
-                + Agregar Producto
+                + Producto
               </button>
             </div>
 
-            <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-[min(56vh,560px)] space-y-1.5 overflow-y-auto pr-1">
               {fields.map((field, index) => (
-                <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                  <div className="md:col-span-4">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Producto</label>
+                <div key={field.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50/80 px-2 py-1.5 rounded-lg border border-slate-100">
+                  <div className="col-span-12 md:col-span-5">
                     <ProductoBuscador
                       value={watchedItems?.[index]?.productoId ?? ''}
                       productoSeleccionado={productosElegidos[index] ?? null}
@@ -434,45 +438,35 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
                       }}
                     />
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cant. (kg)</label>
+                  <div className="col-span-4 md:col-span-2">
                     <input
                       type="text"
                       inputMode="decimal"
                       autoComplete="off"
-                      placeholder="5,830"
+                      placeholder="5,830 kg"
                       {...register(`items.${index}.cantidad` as const)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
+                      aria-label="Cantidad en kg"
                     />
                   </div>
-                  <div className="md:col-span-3">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Descripción / Variedad</label>
+                  <div className="col-span-8 md:col-span-3">
                     <input
                       {...register(`items.${index}.descripcion` as const)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
-                      placeholder="Ej: Color azul, talle L..."
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
+                      placeholder="Variedad (opcional)"
                     />
                   </div>
-                  <div className="md:col-span-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Precio</label>
-                    <div className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-right text-xs font-black text-slate-700">
-                      {formatMoney(getItemPrecio(watchedItems?.[index]))}
-                    </div>
+                  <div className="col-span-10 md:col-span-1 text-right text-[11px] font-black text-emerald-700 tabular-nums">
+                    {formatMoney(getItemSubtotal(watchedItems?.[index]))}
                   </div>
-                  <div className="md:col-span-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Total</label>
-                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-2 text-right text-xs font-black text-emerald-700">
-                      {formatMoney(getItemSubtotal(watchedItems?.[index]))}
-                    </div>
-                  </div>
-                  <div className="md:col-span-1">
+                  <div className="col-span-2 md:col-span-1">
                     <button
                       type="button"
                       onClick={() => remove(index)}
-                      className="w-full p-2 text-red-400 hover:text-red-600 bg-red-50 rounded-lg transition-colors border border-red-100 flex items-center justify-center"
+                      className="w-full p-1.5 text-red-400 hover:text-red-600 bg-red-50 rounded-lg border border-red-100 flex items-center justify-center"
                       title="Quitar ítem"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                   </div>
                 </div>
@@ -534,7 +528,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredRemitos.length > 0 ? filteredRemitos.map((r: Remito) => (
-            <div key={r.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div key={r.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="space-y-4">
                 <div className="flex justify-between items-start">
                   <div>

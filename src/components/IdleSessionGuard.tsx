@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { forceLogoutToLogin, isSessionExpired, touchSessionActivity } from '../../utils/session';
+import { forceLogoutToLogin, isSessionExpired, touchSessionActivity } from '../utils/session';
 
 /**
  * Cierra la sesión si el JWT venció o si no hubo actividad (mouse, teclado, click).
