@@ -26,12 +26,10 @@ El dueño carga esto a mano. No hay passwords en git.
 1. Login tenant `fogon`.
 2. Abrir caja.
 3. POS: venta de mostrador → baja stock. Canal `MOSTRADOR`, estado `PAGADA`.
-4. Menú **Pedidos** → Nuevo pedido (delivery o WhatsApp): nombre + teléfono + dirección + productos.
-5. El pedido aparece en el tablero. Avanzar estados:
-   - WhatsApp: Pendiente → En preparación → Listo → Entregado
-   - Delivery: Pendiente → En preparación → En camino → Entregado
-6. El botón **guarda en la base**. Recargar si hace falta: el estado sigue ahí.
-7. (Opcional) POST del bot: mismo tablero, canal WhatsApp.
+4. Menú **Pedidos** (Cocina). Nuevo pedido delivery o WhatsApp a mano.
+5. En la tarjeta: tiempo (“hace 4 min”), **Comanda** (imprime tel, dirección y notas).
+6. Avanzar estados hasta entregado. Los entregados salen de Cocina; están en Historial.
+7. Si entra un pedido nuevo mientras el tablero está abierto: badge + sonido corto.
 
 ## Bot externo
 

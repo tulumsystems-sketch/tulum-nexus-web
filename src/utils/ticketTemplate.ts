@@ -26,6 +26,11 @@ export interface TicketVenta {
   totalFinal?: number | null;
   metodoPago?: string | null;
   montoAbonado?: number | null;
+  canal?: string | null;
+  nombreContacto?: string | null;
+  telefonoContacto?: string | null;
+  direccionEntrega?: string | null;
+  observaciones?: string | null;
 }
 
 const escapar = (valor: unknown): string =>
@@ -70,6 +75,18 @@ export const construirTicketHtml = (venta: TicketVenta, config: any): string => 
 
   const { ivaPorcentaje, totalNeto, totalIva, totalFinal } = desglosar(venta, config);
   const montoAbonado = Number(venta.montoAbonado || 0);
+  const canal = (venta.canal || 'MOSTRADOR').toUpperCase();
+  const esPedido = canal === 'DELIVERY' || canal === 'WHATSAPP';
+  const titulo = esPedido ? (canal === 'DELIVERY' ? 'COMANDA DELIVERY' : 'COMANDA WHATSAPP') : 'TICKET';
+  const nombrePedido =
+    (venta.nombreContacto && venta.nombreContacto.trim()) ||
+    (venta.cliente?.nombre
+      ? `${venta.cliente.nombre} ${venta.cliente.apellido || ''}`.trim()
+      : '') ||
+    clienteNombre;
+  const telefono = venta.telefonoContacto?.trim() || '';
+  const direccion = venta.direccionEntrega?.trim() || '';
+  const notas = venta.observaciones?.trim() || '';
 
   const itemsHtml = (venta.items || [])
     .map((item) => {
@@ -90,7 +107,7 @@ export const construirTicketHtml = (venta: TicketVenta, config: any): string => 
   return `
     <html>
       <head>
-        <title>Ticket #BT-${comprobante}</title>
+          <title>${esPedido ? 'Comanda' : 'Ticket'} #${comprobante}</title>
         <style>
           body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0 auto; color: #000; font-size: 11px; padding: 10px; }
           .center { text-align: center; }
@@ -107,14 +124,18 @@ export const construirTicketHtml = (venta: TicketVenta, config: any): string => 
         <div class="header center">
           ${logoUrl ? `<img src="${escapar(logoUrl)}" class="logo" alt="" />` : ''}
           <div class="bold" style="font-size: 15px;">${nombreEmpresa}</div>
-          <div>COMPROBANTE NO FISCAL</div>
+          <div>${esPedido ? escapar(titulo) : 'COMPROBANTE NO FISCAL'}</div>
         </div>
 
         <div>
-          <div class="bold">TICKET: #BT-${comprobante}</div>
+          <div class="bold">${esPedido ? 'PEDIDO' : 'TICKET'}: #${comprobante}</div>
           <div>FECHA: ${fecha}</div>
-          <div>CLIENTE: ${clienteNombre}</div>
+          <div>${esPedido ? 'PARA' : 'CLIENTE'}: ${escapar(nombrePedido)}</div>
+          ${esPedido ? `<div>CANAL: ${escapar(canal)}</div>` : ''}
+          ${telefono ? `<div>TEL: ${escapar(telefono)}</div>` : ''}
+          ${direccion ? `<div>DIR: ${escapar(direccion)}</div>` : ''}
         </div>
+        ${notas ? `<div style="margin-top: 8px; border: 1px dashed #000; padding: 6px;"><div class="bold">NOTAS</div><div>${escapar(notas)}</div></div>` : ''}
 
         <table>
           <thead>

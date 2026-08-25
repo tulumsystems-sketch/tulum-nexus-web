@@ -1,13 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
   Bike,
   CheckCircle2,
   ChefHat,
+  Clock,
   MapPin,
   MessageCircle,
   Phone,
   Plus,
+  Printer,
   ShoppingBag,
   Store,
   Trash2,
@@ -17,6 +19,7 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 import { AppButton } from '../../../components/ui/AppButton';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { getMetodosPagoHabilitados, MetodoPago } from '../../../utils/tenantConfig';
+import { imprimirTicket, TicketVenta } from '../../../utils/ticketTemplate';
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
@@ -107,12 +110,71 @@ const labelEstadoAccion = (estado: string): string => {
   }
 };
 
+const haceTiempo = (fecha?: string, ahora = Date.now()): string => {
+  if (!fecha) return '';
+  const minutos = Math.max(0, Math.floor((ahora - new Date(fecha).getTime()) / 60000));
+  if (minutos < 1) return 'recién';
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `hace ${horas} h`;
+  return `hace ${Math.floor(horas / 24)} d`;
+};
+
+const avisarPedidoNuevo = () => {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1174, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch {
+    // Si el browser bloquea audio, el badge visual alcanza.
+  }
+};
+
+const pedidoATicket = (pedido: Pedido): TicketVenta => {
+  const nombre =
+    pedido.nombreContacto ||
+    `${pedido.cliente?.nombre || ''} ${pedido.cliente?.apellido || ''}`.trim();
+  return {
+    id: pedido.id,
+    nroComprobante: pedido.nroComprobante,
+    fecha: pedido.fecha,
+    canal: pedido.canal,
+    nombreContacto: nombre,
+    telefonoContacto: pedido.telefonoContacto || pedido.cliente?.telefono,
+    direccionEntrega: pedido.direccionEntrega,
+    observaciones: pedido.observaciones,
+    metodoPago: pedido.metodoPago,
+    totalFinal: pedido.totalFinal,
+    cliente: pedido.cliente,
+    items: (pedido.items || []).map((item) => ({
+      cantidad: item.cantidad,
+      precioUnitario: item.precioUnitario,
+      producto: { nombre: item.producto },
+    })),
+  };
+};
+
 export const PedidosTab: React.FC = () => {
   const [canalFiltro, setCanalFiltro] = useState<'' | CanalPedido>('');
   const [actividad, setActividad] = useState<FiltroActividad>('activos');
   const [formAbierto, setFormAbierto] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
+  const [ahora, setAhora] = useState(Date.now());
+  const [avisoNuevos, setAvisoNuevos] = useState<string | null>(null);
+  const [idsNuevos, setIdsNuevos] = useState<Set<number>>(new Set());
+  const idsVistos = useRef<Set<number> | null>(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -120,9 +182,6 @@ export const PedidosTab: React.FC = () => {
     params.set('size', '50');
     params.set('sort', 'fecha,desc');
     if (canalFiltro) params.set('canal', canalFiltro);
-    if (actividad === 'activos') {
-      // El tablero de cocina no mezcla entregados. El filtro "todos" sí.
-    }
     return `/ventas/search?${params.toString()}`;
   }, [canalFiltro]);
 
@@ -132,13 +191,44 @@ export const PedidosTab: React.FC = () => {
   const { data: globalConfig } = useSWR('/config', fetcher);
 
   const pedidos: Pedido[] = Array.isArray(data?.content) ? data.content : [];
-  const visibles = pedidos.filter((p) => {
-    if (p.estado === 'ANULADA') return false;
-    if (actividad === 'activos') {
-      return p.estado !== 'ENTREGADO' && p.estado !== 'PAGADA';
+  const cocina = pedidos.filter((p) => p.estado !== 'ANULADA' && p.estado !== 'ENTREGADO' && p.estado !== 'PAGADA');
+  const idsCocina = cocina.map((p) => p.id).join(',');
+  const visibles = actividad === 'activos'
+    ? cocina
+    : pedidos.filter((p) => p.estado !== 'ANULADA');
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setAhora(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const ids = new Set(idsCocina ? idsCocina.split(',').map(Number) : []);
+    if (idsVistos.current === null) {
+      idsVistos.current = ids;
+      return;
     }
-    return true;
-  });
+    const recienLlegados = [...ids].filter((id) => !idsVistos.current!.has(id));
+    idsVistos.current = ids;
+    if (recienLlegados.length === 0) return undefined;
+    setIdsNuevos((prev) => new Set([...prev, ...recienLlegados]));
+    setAvisoNuevos(
+      recienLlegados.length === 1 ? 'Entró un pedido nuevo' : `Entraron ${recienLlegados.length} pedidos nuevos`
+    );
+    avisarPedidoNuevo();
+    const limpiaAviso = window.setTimeout(() => setAvisoNuevos(null), 8000);
+    const limpiaNuevos = window.setTimeout(() => {
+      setIdsNuevos((prev) => {
+        const siguiente = new Set(prev);
+        recienLlegados.forEach((id) => siguiente.delete(id));
+        return siguiente;
+      });
+    }, 20000);
+    return () => {
+      window.clearTimeout(limpiaAviso);
+      window.clearTimeout(limpiaNuevos);
+    };
+  }, [idsCocina]);
 
   const cambiarEstado = async (pedido: Pedido, estado: string) => {
     setGuardandoId(pedido.id);
@@ -161,7 +251,7 @@ export const PedidosTab: React.FC = () => {
       <PageHeader
         eyebrow="Sala y delivery"
         title="Pedidos"
-        description="WhatsApp y delivery en un solo tablero. El mostrador sigue en el POS."
+        description="Cocina y delivery. Los entregados no aparecen acá salvo que abras el historial."
         icon={ShoppingBag}
         action={
           <AppButton icon={Plus} onClick={() => setFormAbierto(true)}>
@@ -171,11 +261,13 @@ export const PedidosTab: React.FC = () => {
         meta={
           <div className="flex flex-wrap gap-2">
             <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-200">
-              {visibles.length} en curso
+              {cocina.length} en cocina
             </span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-slate-300">
-              Actualiza cada 8s
-            </span>
+            {avisoNuevos && (
+              <span className="animate-pulse rounded-full border border-amber-400/40 bg-amber-500/20 px-3 py-1 text-xs font-black text-amber-100">
+                {avisoNuevos}
+              </span>
+            )}
           </div>
         }
       />
@@ -187,8 +279,8 @@ export const PedidosTab: React.FC = () => {
         <FiltroChip activo={canalFiltro === ''} onClick={() => setCanalFiltro('')}>Todos los canales</FiltroChip>
         <FiltroChip activo={canalFiltro === 'WHATSAPP'} onClick={() => setCanalFiltro('WHATSAPP')}>WhatsApp</FiltroChip>
         <FiltroChip activo={canalFiltro === 'DELIVERY'} onClick={() => setCanalFiltro('DELIVERY')}>Delivery</FiltroChip>
-        <FiltroChip activo={actividad === 'activos'} onClick={() => setActividad('activos')}>Activos</FiltroChip>
-        <FiltroChip activo={actividad === 'todos'} onClick={() => setActividad('todos')}>Incluir entregados</FiltroChip>
+        <FiltroChip activo={actividad === 'activos'} onClick={() => setActividad('activos')}>Cocina</FiltroChip>
+        <FiltroChip activo={actividad === 'todos'} onClick={() => setActividad('todos')}>Historial</FiltroChip>
       </div>
 
       {isLoading ? (
@@ -198,8 +290,8 @@ export const PedidosTab: React.FC = () => {
       ) : visibles.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-12 text-center">
           <MessageCircle className="mx-auto mb-3 h-10 w-10 text-slate-600" />
-          <p className="text-lg font-black text-white">No hay pedidos en este filtro</p>
-          <p className="mt-2 text-sm text-slate-400">Cargá uno a mano para la demo, o esperá uno por WhatsApp.</p>
+          <p className="text-lg font-black text-white">Cocina libre</p>
+          <p className="mt-2 text-sm text-slate-400">Cargá un pedido a mano para la demo. Los entregados están en Historial.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -207,7 +299,10 @@ export const PedidosTab: React.FC = () => {
             <PedidoCard
               key={pedido.id}
               pedido={pedido}
+              esNuevo={idsNuevos.has(pedido.id)}
+              hace={haceTiempo(pedido.fecha, ahora)}
               guardando={guardandoId === pedido.id}
+              onImprimir={() => imprimirTicket(pedidoATicket(pedido), globalConfig)}
               onCambiarEstado={cambiarEstado}
             />
           ))}
@@ -251,9 +346,12 @@ const FiltroChip: React.FC<{ activo: boolean; onClick: () => void; children: Rea
 
 const PedidoCard: React.FC<{
   pedido: Pedido;
+  esNuevo: boolean;
+  hace: string;
   guardando: boolean;
+  onImprimir: () => void;
   onCambiarEstado: (pedido: Pedido, estado: string) => void;
-}> = ({ pedido, guardando, onCambiarEstado }) => {
+}> = ({ pedido, esNuevo, hace, guardando, onImprimir, onCambiarEstado }) => {
   const nombre =
     pedido.nombreContacto ||
     `${pedido.cliente?.nombre || ''} ${pedido.cliente?.apellido || ''}`.trim() ||
@@ -262,13 +360,26 @@ const PedidoCard: React.FC<{
   const CanalIcon = pedido.canal === 'DELIVERY' ? Bike : pedido.canal === 'WHATSAPP' ? MessageCircle : Store;
 
   return (
-    <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/20">
+    <article className={`rounded-2xl border bg-slate-900 p-5 shadow-xl shadow-black/20 ${
+      esNuevo ? 'border-amber-400/60 ring-2 ring-amber-400/30' : 'border-slate-800'
+    }`}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="font-mono text-xs font-black text-emerald-300">#{pedido.nroComprobante || pedido.id}</p>
           <h3 className="mt-1 text-lg font-black text-white">{nombre}</h3>
+          {hace && (
+            <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-slate-400">
+              <Clock className="h-3.5 w-3.5" />
+              {hace}
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-2">
+          {esNuevo && (
+            <span className="rounded-full border border-amber-400/40 bg-amber-500/20 px-2 py-0.5 text-[10px] font-black uppercase text-amber-100">
+              Nuevo
+            </span>
+          )}
           <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${tonoEstado(pedido.estado)}`}>
             {LABELS_ESTADO[pedido.estado || ''] || pedido.estado}
           </span>
@@ -310,11 +421,19 @@ const PedidoCard: React.FC<{
         ))}
       </ul>
 
-      <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-4">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
         <p className="text-xl font-black text-white">
           ${Number(pedido.totalFinal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
         </p>
         <div className="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={onImprimir}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-black text-slate-200 hover:bg-slate-800"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Comanda
+          </button>
           {(pedido.proximosEstados || []).map((estado) => (
             <button
               key={estado}
