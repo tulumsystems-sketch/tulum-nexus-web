@@ -107,6 +107,9 @@ export const SuperAdminPanel: React.FC = () => {
   const posBarcode = Array.isArray(featureData)
     ? featureData.find((feature) => feature.featureKey === 'POS_BARCODE')
     : null;
+  const whatsappBot = Array.isArray(featureData)
+    ? featureData.find((feature) => feature.featureKey === 'WHATSAPP_BOT')
+    : null;
 
   const logout = () => {
     localStorage.clear();
@@ -169,27 +172,31 @@ export const SuperAdminPanel: React.FC = () => {
     }
   };
 
-  const togglePosBarcode = async () => {
-    if (!effectiveTenantId || !posBarcode) return;
-    setSavingFeature('POS_BARCODE');
+  const toggleFeature = async (featureKey: string, currentEnabled?: boolean) => {
+    if (!effectiveTenantId || currentEnabled === undefined) return;
+    setSavingFeature(featureKey);
     setFeedback(null);
     try {
-      await apiClient.put(`/superadmin/tenants/${effectiveTenantId}/features/POS_BARCODE`, {
-        enabled: !posBarcode.enabled,
+      await apiClient.put(`/superadmin/tenants/${effectiveTenantId}/features/${featureKey}`, {
+        enabled: !currentEnabled,
       });
       await mutateFeatures();
       setFeedback({
         type: 'success',
-        message: `POS_BARCODE ${!posBarcode.enabled ? 'habilitado' : 'deshabilitado'} para ${effectiveTenantId}.`,
+        message: `${featureKey} ${!currentEnabled ? 'habilitado' : 'deshabilitado'} para ${effectiveTenantId}.`,
       });
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        message: err.response?.data?.message || 'No pudimos actualizar POS_BARCODE.',
+        message: err.response?.data?.message || `No pudimos actualizar ${featureKey}.`,
       });
     } finally {
       setSavingFeature(null);
     }
+  };
+
+  const togglePosBarcode = async () => {
+    await toggleFeature('POS_BARCODE', posBarcode?.enabled);
   };
 
   const handleCreateTenant = async (e: React.FormEvent) => {
@@ -465,7 +472,7 @@ export const SuperAdminPanel: React.FC = () => {
                   </div>
 
                   {/* Feature: Barcode */}
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 flex items-center justify-between md:col-span-2">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 flex items-center justify-between">
                     <div>
                       <div className="text-sm font-black text-white">Lector de Código de Barras (POS_BARCODE)</div>
                       <p className="mt-0.5 text-xs font-medium text-slate-400">
@@ -481,6 +488,27 @@ export const SuperAdminPanel: React.FC = () => {
                         checked={Boolean(posBarcode?.enabled)}
                         onChange={togglePosBarcode}
                         disabled={!posBarcode || savingFeature === 'POS_BARCODE'}
+                        className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-black text-white">Pedidos por WhatsApp (WHATSAPP_BOT)</div>
+                      <p className="mt-0.5 text-xs font-medium text-slate-400">
+                        Permite que el bot externo cree pedidos con X-Bot-Secret. El tablero Pedidos funciona igual sin el bot.
+                      </p>
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <span className="text-xs font-bold text-slate-300">
+                        {whatsappBot?.enabled ? 'Activo' : 'Inactivo'}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(whatsappBot?.enabled)}
+                        onChange={() => toggleFeature('WHATSAPP_BOT', whatsappBot?.enabled ?? false)}
+                        disabled={savingFeature === 'WHATSAPP_BOT'}
                         className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
                       />
                     </label>

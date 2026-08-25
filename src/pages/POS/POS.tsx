@@ -222,6 +222,7 @@ export const POS: React.FC = () => {
 
     const payload = {
       clienteId,
+      canal: 'MOSTRADOR',
       items: cart.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })),
       metodoPago,
       ...(metodoPago === 'EFECTIVO' && { montoAbonado: Number(montoAbonado) }),

@@ -25,7 +25,7 @@ import { CreateCategoryForm } from './components/CreateCategoryForm';
 import { CreateProductForm } from './components/CreateProductForm';
 import { CreateClientForm } from './components/CreateClientForm';
 import { SettingsTab } from './components/SettingsTab';
-import { MonitorPedidosOnline } from './components/MonitorPedidosOnline';
+import { PedidosTab } from './components/PedidosTab';
 import { VentasChart } from './components/VentasChart';
 import { UsuariosTab } from './components/UsuariosTab';
 import { RemitosTab } from './components/RemitosTab';
@@ -56,7 +56,7 @@ import { imprimirTicket } from '../../utils/ticketTemplate';
 // Fetcher usando nuestro cliente Axios
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
-type TabType = 'dashboard' | 'categories' | 'products' | 'clients' | 'sales' | 'settings' | 'usuarios' | 'remitos' | 'proveedores' | 'compras' | 'movimientos' | 'auditoria';
+type TabType = 'dashboard' | 'categories' | 'products' | 'clients' | 'sales' | 'settings' | 'usuarios' | 'remitos' | 'pedidos' | 'proveedores' | 'compras' | 'movimientos' | 'auditoria';
 
 export const Dashboard: React.FC = () => {
   const token = localStorage.getItem('token');
@@ -140,6 +140,12 @@ export const Dashboard: React.FC = () => {
     const timer = window.setInterval(cargarCaja, 60000);
     return () => window.clearInterval(timer);
   }, [token, esPreventista]);
+
+  useEffect(() => {
+    if (esPreventista && globalConfig && globalConfig.remitosHabilitado === false) {
+      setActiveTab((tab) => (tab === 'remitos' ? 'products' : tab));
+    }
+  }, [esPreventista, globalConfig]);
 
   // Historial de Cierres de Caja (solo carga cuando el modal está abierto)
   const { data: historialCajas, mutate: mutateHistorialCajas } = useSWR(
@@ -351,6 +357,7 @@ export const Dashboard: React.FC = () => {
     settings: 'Configuración del Tenant',
     usuarios: 'Gestión de Usuarios',
     remitos: 'Hojas de Ruta',
+    pedidos: 'Pedidos',
     proveedores: 'Proveedores',
     compras: 'Compras',
     movimientos: 'Movimientos de Stock',
@@ -469,6 +476,20 @@ export const Dashboard: React.FC = () => {
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             Punto de Venta (POS)
+          </button>
+          )}
+
+          {!esPreventista && (
+          <button
+            onClick={() => handleTabChange('pedidos')}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+              activeTab === 'pedidos'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                : 'text-slate-400 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+            Pedidos
           </button>
           )}
 
@@ -970,6 +991,7 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'usuarios' && <UsuariosTab />}
 
           {/* TAB: REMITOS */}
+          {activeTab === 'pedidos' && !esPreventista && <PedidosTab />}
           {activeTab === 'remitos' && <RemitosTab ocultarCobranzas={esPreventista} />}
 
           {/* TAB: PROVEEDORES */}
@@ -1059,11 +1081,19 @@ export const Dashboard: React.FC = () => {
                   </section>
                 )}
 
-                {/* Alertas de Stock Mínimo */}
               <AlertasStock />
 
-              {/* Monitor de Pedidos Online WhatsApp */}
-              <MonitorPedidosOnline />
+              {!esPreventista && (
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('pedidos')}
+                  className="w-full rounded-2xl border border-slate-800 bg-slate-900 p-5 text-left shadow-sm transition hover:border-emerald-500/40"
+                >
+                  <p className="text-xs font-black uppercase tracking-widest text-emerald-400">Pedidos</p>
+                  <p className="mt-1 text-lg font-black text-white">WhatsApp y delivery</p>
+                  <p className="mt-1 text-sm text-slate-400">Abrí el tablero para ver estados, dirección y cargar un pedido a mano.</p>
+                </button>
+              )}
 
 
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
