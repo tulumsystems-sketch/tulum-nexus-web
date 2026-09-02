@@ -109,10 +109,7 @@ export const ProveedoresTab: React.FC = () => {
   return (
     <div className="mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <PageHeader
-        eyebrow="Compras y abastecimiento"
-        title="Gestion de proveedores"
-        description="Centraliza contactos, datos fiscales y referencias comerciales para operar compras con mejor control."
-        icon={Building2}
+        description="Contactos y datos fiscales para compras."
         meta={<StatusPill label={`${proveedorList.length} proveedores activos`} tone="blue" />}
       />
 

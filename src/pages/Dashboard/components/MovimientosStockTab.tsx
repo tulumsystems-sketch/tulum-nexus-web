@@ -39,21 +39,20 @@ const getSource = (movement: StockMovement) => {
   return '-';
 };
 
-export const MovimientosStockTab: React.FC = () => {
+export const MovimientosStockTab: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
   const [tipoMovimiento, setTipoMovimiento] = useState('');
   const endpoint = tipoMovimiento ? `/stock-movements?tipoMovimiento=${tipoMovimiento}` : '/stock-movements';
   const { data, error, isLoading } = useSWR(endpoint, fetcher);
   const movements: StockMovement[] = Array.isArray(data) ? data : [];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className={compact ? 'space-y-6' : 'mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500'}>
+      {!compact && (
       <PageHeader
-        eyebrow="Inventario trazable"
-        title="Movimientos de stock"
-        description="Lee entradas, salidas, ajustes y referencias operativas con una tabla preparada para auditoria."
-        icon={Boxes}
+        description="Entradas, salidas y ajustes."
         meta={<StatusPill label={`${movements.length} movimientos`} tone="blue" />}
       />
+      )}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

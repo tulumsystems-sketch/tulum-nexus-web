@@ -11,12 +11,12 @@ interface MetricCardProps {
   tone?: Tone;
 }
 
-const toneClasses: Record<Tone, { icon: string; line: string }> = {
-  blue: { icon: 'bg-blue-50 text-blue-600 border-blue-100', line: 'from-blue-500 to-cyan-400' },
-  emerald: { icon: 'bg-emerald-50 text-emerald-600 border-emerald-100', line: 'from-emerald-500 to-teal-400' },
-  indigo: { icon: 'bg-indigo-50 text-indigo-600 border-indigo-100', line: 'from-indigo-500 to-blue-400' },
-  amber: { icon: 'bg-amber-50 text-amber-600 border-amber-100', line: 'from-amber-500 to-orange-400' },
-  slate: { icon: 'bg-slate-100 text-slate-700 border-slate-200', line: 'from-slate-700 to-slate-400' },
+const toneClasses: Record<Tone, string> = {
+  blue: 'text-tulum-accent border-tulum-accent/30 bg-tulum-accent/10',
+  indigo: 'text-tulum-accent border-tulum-accent/30 bg-tulum-accent/10',
+  emerald: 'text-tulum-success border-tulum-success/30 bg-tulum-success/10',
+  amber: 'text-tulum-warning border-tulum-warning/30 bg-tulum-warning/10',
+  slate: 'text-tulum-muted border-tulum-border bg-tulum-elevated',
 };
 
 export const MetricCard: React.FC<MetricCardProps> = ({
@@ -25,22 +25,17 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   helper,
   icon: Icon,
   tone = 'blue',
-}) => {
-  const classes = toneClasses[tone];
-
-  return (
-    <div className="group relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/25 transition-all hover:-translate-y-0.5 hover:border-slate-700 hover:shadow-2xl hover:shadow-black/35">
-      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${classes.line}`} />
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
-          <div className="mt-3 text-3xl font-black tracking-tight text-slate-50">{value}</div>
-          {helper && <p className="mt-2 text-sm font-medium text-slate-400">{helper}</p>}
-        </div>
-        <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border ${classes.icon}`}>
-          <Icon className="h-6 w-6" />
-        </div>
+}) => (
+  <div className="rounded-2xl border border-tulum-border bg-tulum-surface p-5">
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-tulum-muted">{label}</p>
+        <div className="mt-3 text-2xl font-semibold tracking-tight text-tulum-bone">{value}</div>
+        {helper && <p className="mt-2 text-sm font-medium text-tulum-muted">{helper}</p>}
+      </div>
+      <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border ${toneClasses[tone]}`}>
+        <Icon className="h-5 w-5" />
       </div>
     </div>
-  );
-};
+  </div>
+);

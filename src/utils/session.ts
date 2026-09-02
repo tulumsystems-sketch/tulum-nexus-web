@@ -1,3 +1,9 @@
+export const homePathForRol = (rol?: string | null): string => {
+  if (rol === 'SUPER_ADMIN') return '/admin';
+  if (rol === 'REPARTIDOR') return '/salida';
+  return '/dashboard';
+};
+
 const TOKEN_KEY = 'token';
 const LAST_ACTIVITY_KEY = 'tulum_last_activity';
 const IDLE_MINUTES_KEY = 'inactividadMinutos';
@@ -8,6 +14,7 @@ export const clearSession = () => {
   localStorage.removeItem('tenant');
   localStorage.removeItem('rol');
   localStorage.removeItem('email');
+  localStorage.removeItem('userId');
   localStorage.removeItem(IDLE_MINUTES_KEY);
   localStorage.removeItem(LAST_ACTIVITY_KEY);
 };

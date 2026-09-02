@@ -139,10 +139,7 @@ export const ComprasTab: React.FC = () => {
   return (
     <div className="mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <PageHeader
-        eyebrow="Abastecimiento"
-        title="Compras a proveedores"
-        description="Controla pedidos, recepcion de mercaderia y actualizacion de stock desde una vista operativa."
-        icon={ClipboardList}
+        description="Pedidos a proveedor y recepción de mercadería."
         meta={<StatusPill label={`${compraList.length} compras`} tone="blue" />}
       />
 

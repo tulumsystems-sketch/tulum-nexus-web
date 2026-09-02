@@ -5,21 +5,26 @@ import * as yup from 'yup';
 import useSWR from 'swr';
 import apiClient from '../../../api/axiosConfig';
 import { calcularPrecioVenta, getMargenPorDefecto } from '../../../utils/tenantConfig';
-import { getSufijoUnidad } from '../../../utils/unidadMedida';
+import { esInsumo, getSufijoUnidad, getUnidadDeProducto } from '../../../utils/unidadMedida';
+import { useTenantFeatures } from '../../../hooks/useTenantFeatures';
+
+export type ProductoFormModo = 'carta' | 'deposito';
 
 export interface CreateProductProps {
   onProductCreated: () => void;
   initialData?: any;
   onCancelEdit?: () => void;
+  /** Fogón: Carta arma platos; Depósito carga insumos y bebidas. */
+  modo?: ProductoFormModo;
 }
 
 export interface ProductFormInputs {
   nombre: string;
   descripcion?: string;
-  precio: number;
+  precio?: number;
   precioCosto?: number;
   margenPorcentaje?: number;
-  cantidadStock: number;
+  cantidadStock?: number;
   medidas?: string;
   categoriaId: number;
   imageUrl?: string;
@@ -43,8 +48,8 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
   precio: yup
     .number()
     .transform((value) => (isNaN(value) ? undefined : value))
-    .required('El precio es obligatorio.')
-    .positive('El precio debe ser mayor a 0.'),
+    .min(0, 'El precio no puede ser negativo.')
+    .optional(),
   precioCosto: yup
     .number()
     .transform((value) => (isNaN(value) ? undefined : value))
@@ -58,8 +63,8 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
   cantidadStock: yup
     .number()
     .transform((value) => (isNaN(value) ? undefined : value))
-    .required('La cantidad en stock es obligatoria.')
-    .min(0, 'La cantidad no puede ser negativa.'),
+    .min(0, 'La cantidad no puede ser negativa.')
+    .optional(),
   medidas: yup.string().optional(),
   categoriaId: yup
     .number()
@@ -76,15 +81,26 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
-export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreated, initialData, onCancelEdit }) => {
+export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreated, initialData, onCancelEdit, modo }) => {
   const [apiError, setApiError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [tipo, setTipo] = useState<'ELABORADO' | 'INSUMO'>('ELABORADO');
+  const [vendible, setVendible] = useState(true);
+  const [receta, setReceta] = useState<{ insumoId: string; cantidad: string }[]>([
+    { insumoId: '', cantidad: '' },
+  ]);
 
   // Carga asíncrona de categorías
   const { data: categorias, isLoading: isLoadingCategorias, error: categoriesError } = useSWR('/categorias', fetcher);
   const { data: globalConfig } = useSWR('/config', fetcher);
+  const { data: catalogo } = useSWR('/productos', fetcher);
+  const { isFeatureEnabled } = useTenantFeatures();
+  const esRestaurante = isFeatureEnabled('MESAS');
+  const modoDeposito = esRestaurante && modo === 'deposito';
+  const modoCarta = esRestaurante && modo === 'carta';
+  const seVende = !modoDeposito || vendible;
 
   const margenPorDefecto = getMargenPorDefecto(globalConfig);
   const usaMargenAutomatico = margenPorDefecto !== null;
@@ -121,6 +137,12 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
     return categoria ? getSufijoUnidad(categoria.unidadMedida) : null;
   }, [categorias, categoriaIdActual]);
 
+  const insumos = React.useMemo(() => {
+    const lista = Array.isArray(catalogo) ? catalogo : [];
+    return lista.filter((p: any) => esInsumo(p) && (!initialData?.id || p.id !== initialData.id));
+  }, [catalogo, initialData]);
+  const recetaArmada = tipo === 'ELABORADO' && receta.some((l) => l.insumoId && Number(l.cantidad) > 0);
+
   // Editando un producto viejo sin costo no podemos derivar nada: avisamos y respetamos el precio.
   const faltaCostoEnProductoExistente = Boolean(initialData) && initialData?.precioCosto == null;
 
@@ -138,6 +160,20 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         stockMinimo: initialData.stockMinimo ?? 0,
       });
       setPreviewUrl(initialData.imageUrl || null);
+      const tipoInicial = modo === 'deposito'
+        ? 'INSUMO'
+        : modo === 'carta'
+          ? 'ELABORADO'
+          : (esInsumo(initialData) ? 'INSUMO' : 'ELABORADO');
+      setTipo(tipoInicial);
+      setVendible(initialData.vendible !== false);
+      const lineas = Array.isArray(initialData.receta) && initialData.receta.length > 0
+        ? initialData.receta.map((l: any) => ({
+            insumoId: String(l.insumoId ?? ''),
+            cantidad: l.cantidad != null ? String(l.cantidad) : '',
+          }))
+        : [{ insumoId: '', cantidad: '' }];
+      setReceta(lineas);
       // El precio guardado manda hasta que se toque el costo.
       setPrecioPisado(true);
     } else {
@@ -154,9 +190,12 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
       });
       setPreviewUrl(null);
       setPrecioPisado(false);
+      setTipo(modo === 'deposito' ? 'INSUMO' : 'ELABORADO');
+      setVendible(modo !== 'deposito');
+      setReceta([{ insumoId: '', cantidad: '' }]);
     }
     setSelectedFile(null);
-  }, [initialData, reset]);
+  }, [initialData, reset, modo]);
 
   // El precio de venta se recalcula solo mientras no lo hayan pisado a mano.
   useEffect(() => {
@@ -205,18 +244,50 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         }
       }
 
-      const payload = {
+      const tipoFinal: 'ELABORADO' | 'INSUMO' = esRestaurante
+        ? (modo === 'deposito' ? 'INSUMO' : modo === 'carta' ? 'ELABORADO' : tipo)
+        : ((initialData?.tipo as 'ELABORADO' | 'INSUMO') || 'ELABORADO');
+      const vendibleFinal = !esRestaurante
+        ? true
+        : modo === 'deposito'
+          ? vendible
+          : modo === 'carta'
+            ? true
+            : tipoFinal !== 'INSUMO';
+
+      const recetaPayload = tipoFinal === 'INSUMO'
+        ? []
+        : receta
+            .map((linea) => ({
+              insumoId: Number(linea.insumoId),
+              cantidad: Number(linea.cantidad),
+            }))
+            .filter((linea) => linea.insumoId > 0 && linea.cantidad > 0);
+
+      if (vendibleFinal && (!data.precio || Number(data.precio) <= 0)) {
+        setApiError(modoDeposito
+          ? 'Si se vende en la carta, necesita un precio de venta.'
+          : 'El plato de la carta necesita un precio de venta.');
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
         nombre: data.nombre,
         descripcion: data.descripcion,
-        precio: data.precio,
+        precio: vendibleFinal ? data.precio : (data.precio ?? 0),
         precioCosto: data.precioCosto ?? null,
         margenPorcentaje: data.margenPorcentaje ?? null,
-        cantidadStock: data.cantidadStock,
+        cantidadStock: recetaPayload.length > 0 ? 0 : (data.cantidadStock ?? 0),
         medidas: data.medidas,
         categoriaId: data.categoriaId,
         stockMinimo: data.stockMinimo ?? 0,
         imageUrl: finalImageUrl,
+        tipo: tipoFinal,
+        vendible: vendibleFinal,
       };
+      if (esRestaurante) {
+        payload.receta = recetaPayload;
+      }
 
       if (initialData && initialData.id) {
         await apiClient.put(`/productos/${initialData.id}`, payload);
@@ -245,7 +316,17 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
   return (
     <div className="w-full p-4 sm:p-6 mb-8 bg-white border border-gray-100 rounded-xl shadow-sm transition-all duration-300 hover:shadow-md">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-slate-800">{initialData ? 'Editar Producto' : 'Crear Nuevo Producto'}</h2>
+        <h2 className="text-xl font-bold text-slate-800">
+          {modoDeposito
+            ? (initialData ? 'Editar artículo de stock' : 'Nuevo artículo de stock')
+            : modoCarta
+              ? (initialData ? 'Editar plato de la carta' : 'Nuevo plato de la carta')
+              : esRestaurante
+                ? (initialData
+                  ? (tipo === 'INSUMO' ? 'Editar materia prima' : 'Editar plato de la carta')
+                  : (tipo === 'INSUMO' ? 'Nueva materia prima' : 'Nuevo plato de la carta'))
+                : (initialData ? 'Editar producto' : 'Nuevo producto')}
+        </h2>
         {initialData && (
           <button type="button" onClick={onCancelEdit} className="text-sm font-semibold text-slate-400 hover:text-slate-600">
             Cancelar Edición
@@ -266,6 +347,62 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+        {esRestaurante && !modoCarta && !modoDeposito && (
+          <>
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-1">
+          <button
+            type="button"
+            onClick={() => setTipo('ELABORADO')}
+            className={`rounded-lg px-3 py-2 text-sm font-bold ${
+              tipo === 'ELABORADO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            Carta
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTipo('INSUMO');
+              setReceta([{ insumoId: '', cantidad: '' }]);
+            }}
+            className={`rounded-lg px-3 py-2 text-sm font-bold ${
+              tipo === 'INSUMO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            Materia prima
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">
+          {tipo === 'INSUMO'
+            ? 'Queso, salame, pan. El stock se descuenta cuando vendés un plato que lo usa en la receta.'
+            : 'Carlito, sánguche, milanesa. Armá la receta en gramos o unidades: vender 10 sánguches descuenta 1 kg de fiambre y 10 panes, no un stock de sánguches.'}
+        </p>
+          </>
+        )}
+
+        {modoCarta && (
+          <p className="text-xs text-slate-500">
+            Sánguche, asado, milanesa. Armá la receta: al vender se descuenta el fiambre del depósito.
+            Las bebidas y lo que se vende de la heladera van en Stock, con la marca «Se vende».
+          </p>
+        )}
+
+        {modoDeposito && (
+          <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 rounded border-slate-300"
+              checked={vendible}
+              onChange={(e) => setVendible(e.target.checked)}
+            />
+            <span>
+              <span className="block text-sm font-bold text-slate-800">Se vende (sale en la carta)</span>
+              <span className="block text-xs text-slate-500">
+                Marcalo para Coca, agua, cerveza. Dejalo apagado para fiambre, pan o artículos de limpieza.
+              </span>
+            </span>
+          </label>
+        )}
         
         {/* Fila 1 */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -277,7 +414,11 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
               className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
                 errors.nombre ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
               }`}
-              placeholder="Ej. Silla Ergonómica"
+              placeholder={modoDeposito
+                ? 'Ej. Queso, Coca, lavandina'
+                : esRestaurante
+                  ? 'Ej. Carlito, sánguche, asado'
+                  : 'Ej. Silla Ergonómica'}
               disabled={isSubmitting}
             />
             {errors.nombre && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.nombre.message}</p>}
@@ -403,7 +544,9 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
 
           <div>
-            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Precio de Venta *</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">
+              {seVende ? 'Precio de Venta *' : 'Precio de venta'}
+            </label>
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-slate-400 font-medium">$</span>
               <input
@@ -436,22 +579,113 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
         </div>
 
+        {esRestaurante && !modoDeposito && tipo !== 'INSUMO' && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold text-slate-800">Receta por unidad vendida</p>
+                <p className="text-xs text-slate-500">
+                  Cantidad en la unidad de cada insumo. Si el queso está en gramos, poné 100. Si está en kg, poné 0.1.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReceta((prev) => [...prev, { insumoId: '', cantidad: '' }])}
+                className="text-xs font-bold text-blue-600 hover:underline"
+              >
+                + Ingrediente
+              </button>
+            </div>
+            {insumos.length === 0 ? (
+              <p className="text-xs font-semibold text-amber-700">
+                Primero cargá artículos en Stock (queso, salame, pan) y después armá el plato.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {receta.map((linea, index) => {
+                  const insumo = insumos.find((p: any) => String(p.id) === String(linea.insumoId));
+                  return (
+                    <div key={`${index}-${linea.insumoId}`} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+                      <select
+                        value={linea.insumoId}
+                        onChange={(e) =>
+                          setReceta((prev) =>
+                            prev.map((l, i) => (i === index ? { ...l, insumoId: e.target.value } : l))
+                          )
+                        }
+                        className="sm:col-span-7 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="">Elegí insumo</option>
+                        {insumos.map((p: any) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre} ({getSufijoUnidad(getUnidadDeProducto(p))})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="sm:col-span-4 relative">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.001"
+                          value={linea.cantidad}
+                          onChange={(e) =>
+                            setReceta((prev) =>
+                              prev.map((l, i) => (i === index ? { ...l, cantidad: e.target.value } : l))
+                            )
+                          }
+                          placeholder="100"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-10 text-sm"
+                        />
+                        <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">
+                          {insumo ? getSufijoUnidad(getUnidadDeProducto(insumo)) : ''}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReceta((prev) =>
+                            prev.length === 1
+                              ? [{ insumoId: '', cantidad: '' }]
+                              : prev.filter((_, i) => i !== index)
+                          )
+                        }
+                        className="sm:col-span-1 text-xs font-bold text-red-500"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Fila 4: Stock, Stock Minimo y Medidas */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
             <label className="block mb-1.5 text-sm font-semibold text-slate-700">
-              Stock *{unidadCategoria ? <span className="ml-1 font-normal text-slate-400">(en {unidadCategoria})</span> : null}
+              Stock{unidadCategoria ? <span className="ml-1 font-normal text-slate-400">(en {unidadCategoria})</span> : null}
             </label>
-            <input
-              type="number"
-              {...register('cantidadStock')}
-              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                errors.cantidadStock ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-              }`}
-              placeholder="0"
-              disabled={isSubmitting}
-            />
-            {errors.cantidadStock && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.cantidadStock.message}</p>}
+            {recetaArmada ? (
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-500">
+                No se stockea el plato. Al vender se descuentan los insumos de la receta.
+              </p>
+            ) : (
+              <>
+                <input
+                  type="number"
+                  step="0.001"
+                  {...register('cantidadStock')}
+                  className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                    errors.cantidadStock ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+                  }`}
+                  placeholder="0"
+                  disabled={isSubmitting}
+                />
+                {errors.cantidadStock && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.cantidadStock.message}</p>}
+              </>
+            )}
           </div>
 
           <div>
@@ -497,9 +731,9 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
                 {isUploading ? 'Subiendo...' : 'Guardando...'}
               </>
             ) : initialData ? (
-               'Actualizar Producto'
+               modoDeposito ? 'Actualizar artículo' : modoCarta ? 'Actualizar plato' : 'Actualizar Producto'
             ) : (
-               'Guardar Producto'
+               modoDeposito ? 'Guardar artículo' : modoCarta ? 'Guardar plato' : 'Guardar Producto'
             )}
           </button>
         </div>

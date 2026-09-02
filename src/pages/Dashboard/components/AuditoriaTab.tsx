@@ -50,10 +50,7 @@ export const AuditoriaTab: React.FC = () => {
   return (
     <div className="mx-auto max-w-7xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <PageHeader
-        eyebrow="Control interno"
-        title="Auditoria operativa"
-        description="Revisa acciones criticas por usuario, entidad y detalle para dar confianza en demo y operacion real."
-        icon={FileSearch}
+        description="Acciones críticas por usuario y entidad."
         meta={<StatusPill label={`${logs.length} eventos`} tone="blue" />}
       />
 

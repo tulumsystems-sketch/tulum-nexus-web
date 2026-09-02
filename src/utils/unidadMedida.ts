@@ -1,8 +1,9 @@
 /**
  * Unidad de medida de una categoría.
  *
- * Es sólo una etiqueta para acompañar las cantidades: el stock, las ventas y los
- * remitos siguen manejando cantidades enteras.
+ * Acompaña las cantidades. El stock de materia prima admite decimales (100 g, 0.5 kg).
+ * Los platos de la carta se venden por unidad; si tienen receta, el stock que importa
+ * es el de los insumos.
  */
 
 export const UNIDAD_POR_DEFECTO = 'UNIDAD';
@@ -34,5 +35,47 @@ export const getSufijoUnidad = (unidadMedida?: string | null): string => {
 export const getUnidadDeProducto = (producto: any): string =>
   producto?.categoria?.unidadMedida || producto?.unidadMedida || UNIDAD_POR_DEFECTO;
 
+export const formatNumeroCantidad = (cantidad: number | null | undefined): string => {
+  const n = Math.round(Number(cantidad ?? 0) * 1000) / 1000;
+  if (Number.isInteger(n)) return String(n);
+  return String(n);
+};
+
 export const formatCantidad = (cantidad: number | null | undefined, unidadMedida?: string | null): string =>
-  `${Number(cantidad ?? 0)} ${getSufijoUnidad(unidadMedida)}`;
+  `${formatNumeroCantidad(cantidad)} ${getSufijoUnidad(unidadMedida)}`;
+
+export const esInsumo = (producto: any): boolean =>
+  String(producto?.tipo || '').toUpperCase() === 'INSUMO';
+
+/** Sale en la carta y se puede vender. Falta el campo = sí (Chirino / datos viejos). */
+export const esVendible = (producto: any): boolean => producto?.vendible !== false;
+
+export const esCarta = (producto: any): boolean => esVendible(producto);
+
+export const tieneReceta = (producto: any): boolean =>
+  Array.isArray(producto?.receta) && producto.receta.length > 0;
+
+/** Depósito: materia prima, o ítem sin receta que se stockea a sí mismo (bebida). */
+export const enDeposito = (producto: any): boolean =>
+  esInsumo(producto) || !tieneReceta(producto);
+
+export const productosDeCarta = <T,>(productos: T[] | null | undefined): T[] =>
+  (Array.isArray(productos) ? productos : []).filter((p) => esVendible(p));
+
+export const productosDeDeposito = <T,>(productos: T[] | null | undefined): T[] =>
+  (Array.isArray(productos) ? productos : []).filter((p) => enDeposito(p));
+
+/** Cuántas porciones se pueden vender: receta → insumos; si no, stock del producto. */
+export const stockCarta = (producto: any): number => {
+  if (tieneReceta(producto) && producto.porcionesEstimadas != null) {
+    return Number(producto.porcionesEstimadas);
+  }
+  return Number(producto?.cantidadStock || 0);
+};
+
+export const etiquetaStockProducto = (producto: any): string => {
+  if (tieneReceta(producto)) {
+    return `≈ ${formatNumeroCantidad(stockCarta(producto))} porciones`;
+  }
+  return formatCantidad(producto?.cantidadStock, getUnidadDeProducto(producto));
+};

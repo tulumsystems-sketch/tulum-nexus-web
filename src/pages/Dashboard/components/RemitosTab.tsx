@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import useSWR from 'swr';
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form';
-import { Download, Truck } from 'lucide-react';
+import { Download } from 'lucide-react';
 import apiClient from '../../../api/axiosConfig';
 import { ErrorAlert } from '../../../components/ui/ErrorAlert';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -30,13 +30,6 @@ interface RemitoItem {
 }
 
 interface RemitoFormInputs {
-  clienteId: number | string;
-  direccionEntrega: string;
-  nombreDestinatario: string;
-  telefonoDestinatario: string;
-  observaciones: string;
-  items: RemitoItem[];
-}
   clienteId: number | string;
   direccionEntrega: string;
   nombreDestinatario: string;
@@ -201,10 +194,7 @@ export const RemitosTab: React.FC<{ ocultarCobranzas?: boolean }> = ({ ocultarCo
   return (
     <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <PageHeader
-        eyebrow="Logistica"
-        title="Remitos y hojas de ruta"
-        description="Gestiona entregas, estados de viaje e incidencias con foco en stock y trazabilidad comercial."
-        icon={Truck}
+        description="Entregas, estados de viaje e incidencias."
         meta={
           <div className="flex flex-wrap gap-2">
             <StatusPill label={`${remitosList.length} remitos`} tone="blue" />

@@ -13,6 +13,7 @@ export interface TicketItem {
   precioUnitario?: number;
   producto?: { nombre?: string; categoria?: { unidadMedida?: string } };
   unidadMedida?: string;
+  observaciones?: string | null;
 }
 
 export interface TicketVenta {
@@ -76,8 +77,16 @@ export const construirTicketHtml = (venta: TicketVenta, config: any): string => 
   const { ivaPorcentaje, totalNeto, totalIva, totalFinal } = desglosar(venta, config);
   const montoAbonado = Number(venta.montoAbonado || 0);
   const canal = (venta.canal || 'MOSTRADOR').toUpperCase();
-  const esPedido = canal === 'DELIVERY' || canal === 'WHATSAPP';
-  const titulo = esPedido ? (canal === 'DELIVERY' ? 'COMANDA DELIVERY' : 'COMANDA WHATSAPP') : 'TICKET';
+  const esPedido = canal === 'DELIVERY' || canal === 'WHATSAPP' || canal === 'RETIRO' || canal === 'SALON';
+  const titulo = esPedido
+    ? (canal === 'DELIVERY'
+      ? 'COMANDA DELIVERY'
+      : canal === 'RETIRO'
+        ? 'COMANDA RETIRO'
+        : canal === 'SALON'
+          ? 'COMANDA SALÓN'
+          : 'COMANDA WHATSAPP')
+    : 'TICKET';
   const nombrePedido =
     (venta.nombreContacto && venta.nombreContacto.trim()) ||
     (venta.cliente?.nombre
@@ -86,18 +95,21 @@ export const construirTicketHtml = (venta: TicketVenta, config: any): string => 
     clienteNombre;
   const telefono = venta.telefonoContacto?.trim() || '';
   const direccion = venta.direccionEntrega?.trim() || '';
-  const notas = venta.observaciones?.trim() || '';
+  const notasRaw = venta.observaciones?.trim() || '';
+  const notas = notasRaw.startsWith('Cuenta abierta') ? '' : notasRaw;
 
   const itemsHtml = (venta.items || [])
     .map((item) => {
       const cantidad = Number(item.cantidad || 0);
       const precioUnitario = Number(item.precioUnitario || 0);
       const unidad = getSufijoUnidad(item.unidadMedida || item.producto?.categoria?.unidadMedida);
+      const notaItem = item.observaciones?.trim() || '';
       return `
         <tr>
           <td style="padding: 4px 0; vertical-align: top;">
             ${escapar(item.producto?.nombre || 'Producto')}
             <div style="font-size: 9px;">${cantidad} ${escapar(unidad)} x ${money(precioUnitario)}</div>
+            ${notaItem ? `<div style="font-size: 9px; font-weight: bold;">* ${escapar(notaItem)}</div>` : ''}
           </td>
           <td style="text-align: right; vertical-align: top;">${money(cantidad * precioUnitario)}</td>
         </tr>`;
@@ -130,7 +142,7 @@ export const construirTicketHtml = (venta: TicketVenta, config: any): string => 
         <div>
           <div class="bold">${esPedido ? 'PEDIDO' : 'TICKET'}: #${comprobante}</div>
           <div>FECHA: ${fecha}</div>
-          <div>${esPedido ? 'PARA' : 'CLIENTE'}: ${escapar(nombrePedido)}</div>
+          <div>${esPedido ? (canal === 'SALON' ? 'MESA' : 'PARA') : 'CLIENTE'}: ${escapar(nombrePedido)}</div>
           ${esPedido ? `<div>CANAL: ${escapar(canal)}</div>` : ''}
           ${telefono ? `<div>TEL: ${escapar(telefono)}</div>` : ''}
           ${direccion ? `<div>DIR: ${escapar(direccion)}</div>` : ''}

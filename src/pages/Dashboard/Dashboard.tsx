@@ -3,9 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import {
   AlertTriangle,
-  BarChart3,
   Building2,
-  CalendarClock,
   DollarSign,
   ExternalLink,
   Eye,
@@ -16,6 +14,8 @@ import {
   Plus,
   Receipt,
   Search,
+  PanelLeft,
+  PanelLeftClose,
   TrendingUp,
   User,
   X,
@@ -26,6 +26,8 @@ import { CreateProductForm } from './components/CreateProductForm';
 import { CreateClientForm } from './components/CreateClientForm';
 import { SettingsTab } from './components/SettingsTab';
 import { PedidosTab } from './components/PedidosTab';
+import { MesasTab } from './components/MesasTab';
+import { RestauranteDashboardHome } from './components/RestauranteDashboardHome';
 import { VentasChart } from './components/VentasChart';
 import { UsuariosTab } from './components/UsuariosTab';
 import { RemitosTab } from './components/RemitosTab';
@@ -33,6 +35,7 @@ import { AlertasStock } from './components/AlertasStock';
 import { ProveedoresTab } from './components/ProveedoresTab';
 import { ComprasTab } from './components/ComprasTab';
 import { MovimientosStockTab } from './components/MovimientosStockTab';
+import { StockLogisticaTab } from './components/StockLogisticaTab';
 import { AuditoriaTab } from './components/AuditoriaTab';
 import { ErrorAlert } from '../../components/ui/ErrorAlert';
 import { AppButton } from '../../components/ui/AppButton';
@@ -41,22 +44,29 @@ import { MetricCard } from '../../components/ui/MetricCard';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { SectionCard } from '../../components/ui/SectionCard';
 import { StatusPill } from '../../components/ui/StatusPill';
-import { clearTenantFeaturesCache } from '../../hooks/useTenantFeatures';
+import { DashboardSidebar } from './components/DashboardSidebar';
+import type { TabType } from './tabTypes';
+import { clearTenantFeaturesCache, useTenantFeatures } from '../../hooks/useTenantFeatures';
 import { clearSession } from '../../utils/session';
 import {
   getMetodoPagoLabelCorto,
   getMetodosPagoHabilitados,
   puedeCobrarConMercadoPago,
 } from '../../utils/tenantConfig';
-import { getSufijoUnidad, getUnidadDeProducto } from '../../utils/unidadMedida';
+import {
+  esInsumo,
+  esVendible,
+  etiquetaStockProducto,
+  getSufijoUnidad,
+  stockCarta,
+  tieneReceta,
+} from '../../utils/unidadMedida';
 import { imprimirTicket } from '../../utils/ticketTemplate';
 
 
 
 // Fetcher usando nuestro cliente Axios
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
-
-type TabType = 'dashboard' | 'categories' | 'products' | 'clients' | 'sales' | 'settings' | 'usuarios' | 'remitos' | 'pedidos' | 'proveedores' | 'compras' | 'movimientos' | 'auditoria';
 
 export const Dashboard: React.FC = () => {
   const token = localStorage.getItem('token');
@@ -67,8 +77,11 @@ export const Dashboard: React.FC = () => {
   // El preventista toma pedidos y remitos en la calle: no cobra en el mostrador.
   const esPreventista = rol === 'PREVENTISTA';
   const puedeUsarPOS = !esPreventista;
+  const { isFeatureEnabled } = useTenantFeatures();
+  const mesasHabilitado = isFeatureEnabled('MESAS');
 
   const [activeTab, setActiveTab] = useState<TabType>(isOperador ? 'products' : esPreventista ? 'remitos' : 'dashboard');
+  const restaurantDefaultApplied = React.useRef(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [montoInicial, setMontoInicial] = useState<number | ''>('');
   const [isOpeningCaja, setIsOpeningCaja] = useState(false);
@@ -80,7 +93,13 @@ export const Dashboard: React.FC = () => {
   const [descargoMonto, setDescargoMonto] = useState<Record<number, string>>({});
   const [descargoMotivo, setDescargoMotivo] = useState<Record<number, string>>({});
   const [guardandoDescargoId, setGuardandoDescargoId] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const saved = sessionStorage.getItem('tulum-nav');
+    if (saved === '0') return false;
+    if (saved === '1') return true;
+    return window.matchMedia('(min-width: 1024px)').matches;
+  });
   const [showProductForm, setShowProductForm] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -142,10 +161,33 @@ export const Dashboard: React.FC = () => {
   }, [token, esPreventista]);
 
   useEffect(() => {
+    sessionStorage.setItem('tulum-nav', sidebarOpen ? '1' : '0');
+  }, [sidebarOpen]);
+  const esRestaurante = mesasHabilitado;
+
+  useEffect(() => {
     if (esPreventista && globalConfig && globalConfig.remitosHabilitado === false) {
       setActiveTab((tab) => (tab === 'remitos' ? 'products' : tab));
     }
   }, [esPreventista, globalConfig]);
+
+  useEffect(() => {
+    if (!esRestaurante || esPreventista) return;
+    const destino: TabType = 'mesas';
+    if (!restaurantDefaultApplied.current) {
+      restaurantDefaultApplied.current = true;
+      setActiveTab(destino);
+      return;
+    }
+    const ocultas: TabType[] = [
+      'proveedores',
+      'compras',
+      'auditoria',
+    ];
+    if (!(globalConfig?.clientesHabilitado ?? false)) ocultas.push('clients');
+    if (!(globalConfig?.remitosHabilitado ?? false)) ocultas.push('remitos');
+    setActiveTab((tab) => (ocultas.includes(tab) ? destino : tab));
+  }, [esRestaurante, esPreventista, globalConfig]);
 
   // Historial de Cierres de Caja (solo carga cuando el modal está abierto)
   const { data: historialCajas, mutate: mutateHistorialCajas } = useSWR(
@@ -336,12 +378,12 @@ export const Dashboard: React.FC = () => {
   // Errors
   if (errorCategorias || errorProductos || errorClientes) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-        <div className="p-8 bg-white border border-red-100 rounded-2xl shadow-xl text-center max-w-md">
-           <svg className="w-16 h-16 mx-auto text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-           <h2 className="text-xl font-bold text-slate-800 mb-2">Error de Sincronización</h2>
-           <p className="text-slate-600 mb-6">No pudimos conectar con el servidor central de Tulum Systems.</p>
-           <button onClick={handleLogout} className="px-6 py-2.5 font-bold text-white transition-all bg-slate-800 rounded-lg shadow hover:bg-slate-900 w-full">Volver al Inicio</button>
+      <div className="tulum-app flex flex-col items-center justify-center min-h-screen bg-tulum-ink">
+        <div className="p-8 bg-tulum-surface border border-tulum-danger/30 rounded-2xl text-center max-w-md">
+           <svg className="w-16 h-16 mx-auto text-tulum-danger mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+           <h2 className="text-xl font-semibold text-tulum-bone mb-2">Error de Sincronización</h2>
+           <p className="text-tulum-muted mb-6">No pudimos conectar con el servidor central de Tulum Systems.</p>
+           <button onClick={handleLogout} className="px-6 py-2.5 font-semibold text-white transition-colors bg-tulum-accent rounded-lg hover:bg-tulum-accent-hover w-full">Volver al Inicio</button>
         </div>
       </div>
     );
@@ -349,19 +391,20 @@ export const Dashboard: React.FC = () => {
 
   // Diccionarios UI
   const tabTitles: Record<TabType, string> = {
-    dashboard: 'Dashboard & Estadísticas',
-    categories: 'Gestión de Categorías',
-    products: 'Catálogo de Productos',
-    clients: 'Directorio de Clientes',
-    sales: 'Punto de Venta (POS)',
-    settings: 'Configuración del Tenant',
-    usuarios: 'Gestión de Usuarios',
-    remitos: 'Hojas de Ruta',
+    dashboard: esRestaurante ? 'Hoy' : 'Resumen',
+    categories: 'Categorías',
+    products: esRestaurante ? 'Carta' : 'Productos',
+    clients: 'Clientes',
+    sales: 'Ventas',
+    settings: 'Preferencias',
+    usuarios: 'Equipo',
+    remitos: 'Hojas de ruta',
     pedidos: 'Pedidos',
+    mesas: 'Mesas',
     proveedores: 'Proveedores',
-    compras: 'Compras',
-    movimientos: 'Movimientos de Stock',
-    auditoria: 'Auditoria',
+    compras: 'Órdenes',
+    movimientos: esRestaurante ? 'Stock' : 'Movimientos',
+    auditoria: 'Auditoría',
   };
 
   // Cálculo de Métricas (Stat Cards) & Resumen de Caja
@@ -379,12 +422,20 @@ export const Dashboard: React.FC = () => {
     caja?.montoFinalEsperado ?? ((caja?.montoInicial || 0) + vendidoEfectivo + cobranzasEfectivo)
   );
 
-  const filteredProducts = Array.isArray(productos) ? productos.filter((p: any) =>
-    (p.nombre || '').toLowerCase().includes(productSearch.toLowerCase())
-  ) : [];
-  const totalProductos = Array.isArray(productos) ? productos.length : 0;
+  const filteredProducts = Array.isArray(productos) ? productos.filter((p: any) => {
+    const matchNombre = (p.nombre || '').toLowerCase().includes(productSearch.toLowerCase());
+    const matchCarta = !esRestaurante || esVendible(p);
+    return matchNombre && matchCarta;
+  }) : [];
+  const totalProductos = Array.isArray(productos)
+    ? (esRestaurante ? productos.filter((p: any) => esVendible(p)).length : productos.length)
+    : 0;
   const productosBajoStock = Array.isArray(productos)
-    ? productos.filter((p: any) => Number(p.cantidadStock || 0) <= Number(p.stockMinimo || 0)).length
+    ? productos.filter((p: any) => {
+        if (esRestaurante && !esVendible(p)) return false;
+        const disponible = esRestaurante && tieneReceta(p) ? stockCarta(p) : Number(p.cantidadStock || 0);
+        return disponible <= Number(p.stockMinimo || 0);
+      }).length
     : 0;
   const productosSinCosto = Array.isArray(productos)
     ? productos.filter((p: any) => p.precioCosto == null).length
@@ -398,21 +449,27 @@ export const Dashboard: React.FC = () => {
   const totalCompradoCliente = ventasDelCliente.reduce((acc: number, venta: any) => acc + Number(venta.totalFinal || 0), 0);
   const cajaAbierta = caja?.estado === 'ABIERTA';
   const cajaStatusMeta = esPreventista
-    ? 'Preventista - pedidos y remitos, sin caja ni POS'
+    ? 'Preventista · pedidos y hojas de ruta'
     : cajaAbierta
-      ? `Caja abierta (${caja.horasAbierta || 0}h / ${caja.limiteHoras || 24}h) - efectivo esperado $${totalEsperadoCaja.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      : 'Caja cerrada - abri un turno para operar en efectivo';
+      ? `Turno abierto · ${caja.horasAbierta || 0}h`
+      : 'Turno cerrado';
+
+  const closeNavIfMobile = () => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      setSidebarOpen(false);
+    }
+  };
 
   const handleTabChange = (tab: TabType) => {
     if (esPreventista && tab !== 'products' && tab !== 'clients' && tab !== 'remitos') {
       return;
     }
     setActiveTab(tab);
-    setSidebarOpen(false);
+    closeNavIfMobile();
   };
 
   return (
-    <div className="tulum-dark flex h-screen overflow-hidden bg-slate-950 font-sans text-slate-100 selection:bg-blue-500/30 selection:text-white">
+    <div className="tulum-app flex h-screen overflow-hidden bg-tulum-ink font-sans text-tulum-bone selection:bg-tulum-accent/30 selection:text-white">
       
       {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
@@ -422,297 +479,58 @@ export const Dashboard: React.FC = () => {
         />
       )}
 
-      {/* Sidebar Lateral Premium */}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-72 bg-[#0f172a] text-white flex flex-col transition-transform duration-300 shadow-2xl lg:static lg:translate-x-0 lg:z-20 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        
-        {/* Branding */}
-        <div className="p-6 border-b border-white/5 flex items-center gap-3">
-          {globalConfig?.logoUrl ? (
-             <img src={globalConfig.logoUrl} alt="Logo" className="w-10 h-10 rounded-xl object-contain bg-white/10 backdrop-blur border border-white/20 p-1 shadow-inner shadow-white/20" />
-          ) : (
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-black text-xl shadow-inner shadow-white/20">
-              T
-            </div>
-          )}
-          <div className="flex-1 truncate">
-            <h1 className="text-xl font-bold tracking-wide text-white leading-tight truncate">{globalConfig?.nombreEmpresa || 'Tulum'}</h1>
-            <p className="text-xs font-medium text-blue-400 uppercase tracking-widest">Systems Core</p>
-          </div>
-        </div>
-        
-        {/* User Badge */}
-        <div className="px-6 py-5 border-b border-white/5 bg-white/5">
-          <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1.5 flex items-center gap-1.5">
-             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-             Sesión Activa
-          </div>
-          <div className="font-semibold text-slate-200 truncate flex items-center gap-2">
-            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            {esAdmin ? 'Administrador' : esPreventista ? 'Preventista' : 'Operador'}
-          </div>
-        </div>
-
-        {/* Navbar */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {!esPreventista && !isOperador && (
-          <button
-            onClick={() => handleTabChange('dashboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              activeTab === 'dashboard'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-            Dashboard
-          </button>
-          )}
-
-          {/* Acceso Directo Punto de Venta POS */}
-          {puedeUsarPOS && (
-          <button
-            onClick={() => { setSidebarOpen(false); navigate('/pos'); }}
-            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-black bg-emerald-600 text-white shadow-lg shadow-emerald-500/10 hover:bg-emerald-700 transition-all duration-200 hover:-translate-y-0.5"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-            Punto de Venta (POS)
-          </button>
-          )}
-
-          {!esPreventista && (
-          <button
-            onClick={() => handleTabChange('pedidos')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              activeTab === 'pedidos'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
-            Pedidos
-          </button>
-          )}
-
-          <button
-
-            onClick={() => handleTabChange('products')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              activeTab === 'products'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
-            Productos
-          </button>
-          
-          {!esPreventista && (
-          <button
-            onClick={() => handleTabChange('categories')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              activeTab === 'categories'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
-            Categorías
-          </button>
-          )}
-          
-          {(globalConfig?.clientesHabilitado ?? true) && (
-            <button
-              onClick={() => handleTabChange('clients')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                activeTab === 'clients'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-              Directorio Clientes
-            </button>
-          )}
-
-          {esAdmin && (
-            <button
-              onClick={() => handleTabChange('usuarios')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                activeTab === 'usuarios'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Gestión Usuarios
-            </button>
-          )}
-
-          {esAdmin && (
-          <button
-            onClick={() => handleTabChange('sales')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-              activeTab === 'sales'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"></path></svg>
-            Ventas / POS
-          </button>
-          )}
-
-          {(globalConfig?.remitosHabilitado ?? true) && (
-            <button
-              onClick={() => handleTabChange('remitos')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                activeTab === 'remitos'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"></path></svg>
-              Hojas de Ruta
-            </button>
-          )}
-
-          {esAdmin && (
-            <div className="pt-2 border-t border-white/5 space-y-2">
-              {(globalConfig?.comprasHabilitado ?? true) && (
-                <>
-                  <button
-                    onClick={() => handleTabChange('proveedores')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                      activeTab === 'proveedores'
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9h1m-1 4h1m-1 4h1m6-4h1m-1 4h1"></path></svg>
-                    Proveedores
-                  </button>
-                  <button
-                    onClick={() => handleTabChange('compras')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                      activeTab === 'compras'
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 14l2 2 4-4"></path></svg>
-                    Compras
-                  </button>
-                </>
-              )}
-              {(globalConfig?.stockHabilitado ?? true) && (
-                <button
-                  onClick={() => handleTabChange('movimientos')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                    activeTab === 'movimientos'
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
-                  Movimientos
-                </button>
-              )}
-              <button
-                onClick={() => handleTabChange('auditoria')}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                  activeTab === 'auditoria'
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"></path></svg>
-                Auditoria
-              </button>
-            </div>
-          )}
-
-          {esAdmin && (
-            <div className="pt-2 border-t border-white/5">
-              <button
-                onClick={() => handleTabChange('settings')}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                  activeTab === 'settings'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                Configuración
-              </button>
-            </div>
-          )}
-        </nav>
-
-
-        <div className="p-6 border-t border-white/5 space-y-3">
-          {puedeUsarPOS && (caja && caja.estado === 'ABIERTA' ? (
-            <button
-              onClick={abrirArqueo}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-amber-500 transition-colors bg-amber-500/10 rounded-xl hover:bg-amber-500 hover:text-white"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-              Cerrar Caja
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsAperturaModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-emerald-500 transition-colors bg-emerald-500/10 rounded-xl hover:bg-emerald-500 hover:text-white"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-              Abrir Turno
-            </button>
-          ))}
-          {esAdmin && (
-            <button
-              onClick={() => setIsHistorialCajasOpen(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-slate-400 transition-colors bg-white/5 rounded-xl hover:bg-slate-100 hover:text-slate-700"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-              Historial de Cierres
-            </button>
-          )}
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-red-400 transition-colors bg-white/5 rounded-xl hover:bg-red-500 hover:text-white"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-            Desconectar
-          </button>
-        </div>
-      </aside>
+      <DashboardSidebar
+        open={sidebarOpen}
+        nombreEmpresa={globalConfig?.nombreEmpresa}
+        logoUrl={globalConfig?.logoUrl}
+        esRestaurante={esRestaurante}
+        esAdmin={esAdmin}
+        esPreventista={esPreventista}
+        isOperador={isOperador}
+        puedeUsarPOS={puedeUsarPOS}
+        mesasHabilitado={mesasHabilitado}
+        clientesHabilitado={esRestaurante ? Boolean(globalConfig?.clientesHabilitado) : (globalConfig?.clientesHabilitado ?? true)}
+        remitosHabilitado={esRestaurante ? Boolean(globalConfig?.remitosHabilitado) : (globalConfig?.remitosHabilitado ?? true)}
+        comprasHabilitado={globalConfig?.comprasHabilitado ?? true}
+        stockHabilitado={globalConfig?.stockHabilitado ?? true}
+        activeTab={activeTab}
+        turnosOpen={isHistorialCajasOpen}
+        cajaAbierta={cajaAbierta}
+        onTabChange={handleTabChange}
+        onGoPos={() => { closeNavIfMobile(); navigate('/pos'); }}
+        onOpenTurnos={() => { closeNavIfMobile(); setIsHistorialCajasOpen(true); }}
+        onAbrirCaja={() => setIsAperturaModalOpen(true)}
+        onCerrarCaja={abrirArqueo}
+        onLogout={handleLogout}
+        onGoHome={() => handleTabChange(esRestaurante ? 'mesas' : esPreventista ? 'remitos' : 'dashboard')}
+        onCollapse={() => setSidebarOpen(false)}
+      />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-screen relative z-10 bg-slate-950">
+      <main className="flex-1 flex flex-col min-w-0 h-screen bg-tulum-ink">
         
         {/* Topbar Header */}
-        <header className="bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 py-4 lg:px-10 lg:py-5 flex items-center justify-between sticky top-0 z-10 gap-3 shadow-sm shadow-black/30">
-           {/* Hamburger (mobile only) */}
+        <header className="bg-tulum-ink border-b border-tulum-border px-4 py-3 lg:px-8 flex items-center gap-3">
            <button
-             onClick={() => setSidebarOpen(true)}
-             className="lg:hidden p-2 -ml-1 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors flex-shrink-0"
-             aria-label="Abrir menú"
+             onClick={() => setSidebarOpen((v) => !v)}
+             className={`p-2 -ml-1 text-tulum-bone hover:bg-tulum-elevated rounded-lg transition-colors flex-shrink-0 ${sidebarOpen ? 'lg:hidden' : ''}`}
+             aria-label={sidebarOpen ? 'Ocultar menú' : 'Mostrar menú'}
+             title={sidebarOpen ? 'Ocultar menú' : 'Mostrar menú'}
            >
-             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+             {sidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeft className="w-5 h-5" />}
            </button>
 
            <div className="min-w-0 flex-1">
-             <h2 className="text-lg lg:text-2xl font-extrabold text-slate-800 tracking-tight truncate">{tabTitles[activeTab]}</h2>
-             <p className="text-xs lg:text-sm font-medium text-slate-500 mt-0.5 hidden sm:block">{cajaStatusMeta}</p>
+             <p className="text-lg lg:text-xl font-semibold text-tulum-bone tracking-tight truncate">
+               {globalConfig?.nombreEmpresa || 'Tulum'}
+             </p>
+             <p className="text-xs font-medium text-tulum-muted mt-0.5 truncate">
+               {tabTitles[activeTab]} · {cajaStatusMeta}
+             </p>
            </div>
-           
-
         </header>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-10 min-h-0">
+        <div className={`relative flex-1 overflow-y-auto overflow-x-hidden min-h-0 ${activeTab === 'pedidos' || activeTab === 'mesas' ? 'p-3 sm:p-4' : 'p-3 sm:p-6 lg:p-8'}`}>
           {feedback && (
             <div className="max-w-7xl mx-auto mb-5">
               <ErrorAlert type={feedback.type} message={feedback.message} />
@@ -723,20 +541,19 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'products' && (
             <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PageHeader
-                eyebrow="Inventario comercial"
-                title="Catalogo de productos"
-                description="Controla precios, imagenes y disponibilidad desde una vista preparada para operar y mostrar en demo."
-                icon={Package}
+                description={esRestaurante
+                  ? 'Platos y bebidas que se venden. El fiambre y la limpieza están en Stock.'
+                  : 'Precios, imágenes y disponibilidad.'}
                 meta={
                   <div className="flex flex-wrap gap-2">
-                    <StatusPill label={`${totalProductos} productos`} tone="blue" />
+                    <StatusPill label={esRestaurante ? `${totalProductos} en carta` : `${totalProductos} productos`} tone="blue" />
                     <StatusPill label={`${productosBajoStock} bajo stock`} tone={productosBajoStock > 0 ? 'amber' : 'emerald'} />
                     {productosSinCosto > 0 && !esPreventista && (
                       <StatusPill label={`${productosSinCosto} sin costo cargado`} tone="amber" />
                     )}
                   </div>
                 }
-                action={!esPreventista ? <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Nuevo producto</AppButton> : undefined}
+                action={!esPreventista ? <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>{esRestaurante ? 'Nuevo plato' : 'Nuevo producto'}</AppButton> : undefined}
               />
               {!esPreventista && (showProductForm || editingProduct) ? (
                 <div className="relative">
@@ -745,9 +562,10 @@ export const Dashboard: React.FC = () => {
                     className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors mb-4"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                    Volver a Productos
+                    {esRestaurante ? 'Volver a Carta' : 'Volver a Productos'}
                   </button>
                   <CreateProductForm 
+                    modo={esRestaurante ? (esInsumo(editingProduct) ? 'deposito' : 'carta') : undefined}
                     onProductCreated={() => { handleProductCreated(); setEditingProduct(null); setShowProductForm(false); }} 
                     initialData={editingProduct}
                     onCancelEdit={() => { setEditingProduct(null); setShowProductForm(false); }}
@@ -767,13 +585,14 @@ export const Dashboard: React.FC = () => {
                       />
                     </div>
                     {!esPreventista && (
-                      <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>Agregar producto</AppButton>
+                      <AppButton icon={Plus} onClick={() => setShowProductForm(true)}>{esRestaurante ? 'Nuevo plato' : 'Agregar producto'}</AppButton>
                     )}
                   </div>
 
                   <SectionCard
-                    title="Catalogo activo"
-                    description="Productos disponibles para ventas, remitos y compras."
+                    description={esRestaurante
+                      ? 'Lo que el cliente pide. El depósito está en Stock.'
+                      : 'Productos para ventas, remitos y compras.'}
                     action={<StatusPill label={`${filteredProducts.length} items`} tone="blue" />}
                   >
                     <div className="overflow-x-auto">
@@ -802,6 +621,19 @@ export const Dashboard: React.FC = () => {
                                </td>
                                <td className="px-6 py-4">
                                  <div className="font-black text-slate-900">{col.nombre}</div>
+                                 {esRestaurante && (
+                                 <div className="mt-1 flex flex-wrap gap-1">
+                                   {tieneReceta(col) ? (
+                                     <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-700">
+                                       Receta
+                                     </span>
+                                   ) : (
+                                     <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-black uppercase text-sky-700">
+                                       De stock
+                                     </span>
+                                   )}
+                                 </div>
+                                 )}
                                  {col.medidas && <div className="mt-1 text-xs font-semibold text-slate-400">{col.medidas}</div>}
                                </td>
                                <td className="px-6 py-4 font-medium text-slate-500">
@@ -820,8 +652,8 @@ export const Dashboard: React.FC = () => {
                                </td>
                                 <td className="px-6 py-4 text-center">
                                   <StatusPill
-                                    label={`${col.cantidadStock} ${getSufijoUnidad(getUnidadDeProducto(col))}`}
-                                    tone={col.cantidadStock <= 0 ? 'red' : col.stockMinimo > 0 && col.cantidadStock <= col.stockMinimo ? 'amber' : 'emerald'}
+                                    label={esRestaurante ? etiquetaStockProducto(col) : `${Number(col.cantidadStock || 0)}`}
+                                    tone={(esRestaurante ? stockCarta(col) : Number(col.cantidadStock || 0)) <= 0 ? 'red' : col.stockMinimo > 0 && (esRestaurante ? stockCarta(col) : Number(col.cantidadStock || 0)) <= col.stockMinimo ? 'amber' : 'emerald'}
                                   />
                                 </td>
                                {!esPreventista && (
@@ -852,7 +684,7 @@ export const Dashboard: React.FC = () => {
                           )) : (
                             <tr>
                               <td colSpan={esPreventista ? 5 : 6} className="px-6 py-8">
-                                <EmptyState compact title="No hay productos para mostrar" description="Crea un producto o ajusta la busqueda para ver resultados." icon={Package} />
+                                <EmptyState compact title="No hay productos para mostrar" description={esRestaurante ? 'Cargá un plato acá, o una bebida en Stock con «Se vende».' : 'Crea un producto o ajusta la busqueda para ver resultados.'} icon={Package} />
                               </td>
                             </tr>
                           )}
@@ -930,7 +762,7 @@ export const Dashboard: React.FC = () => {
 
               <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                  <h3 className="text-lg font-bold text-slate-800">Directorio General</h3>
+                  <h3 className="text-lg font-bold text-slate-800">Clientes</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-sm text-slate-600">
@@ -991,7 +823,8 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'usuarios' && <UsuariosTab />}
 
           {/* TAB: REMITOS */}
-          {activeTab === 'pedidos' && !esPreventista && <PedidosTab />}
+          {activeTab === 'pedidos' && !esPreventista && esRestaurante && <PedidosTab />}
+          {activeTab === 'mesas' && !esPreventista && mesasHabilitado && <MesasTab />}
           {activeTab === 'remitos' && <RemitosTab ocultarCobranzas={esPreventista} />}
 
           {/* TAB: PROVEEDORES */}
@@ -1001,19 +834,33 @@ export const Dashboard: React.FC = () => {
           {activeTab === 'compras' && <ComprasTab />}
 
           {/* TAB: MOVIMIENTOS */}
-          {activeTab === 'movimientos' && <MovimientosStockTab />}
+          {activeTab === 'movimientos' && (esRestaurante ? <StockLogisticaTab /> : <MovimientosStockTab />)}
 
           {/* TAB: AUDITORIA */}
           {activeTab === 'auditoria' && <AuditoriaTab />}
 
           {/* TAB: DASHBOARD */}
           {activeTab === 'dashboard' && !esPreventista && (
+            esRestaurante ? (
+              <RestauranteDashboardHome
+                nombreEmpresa={globalConfig?.nombreEmpresa}
+                cajaAbierta={cajaAbierta}
+                cajaLabel={
+                  cajaAbierta
+                    ? `${caja?.horasAbierta || 0}h / ${caja?.limiteHoras || 24}h`
+                    : undefined
+                }
+                onAbrirCaja={() => setIsAperturaModalOpen(true)}
+                onCerrarCaja={abrirArqueo}
+                onIrPedidos={() => handleTabChange('pedidos')}
+                onIrMesas={() => handleTabChange('mesas')}
+                onIrPos={() => navigate('/pos')}
+                ingresosTotales={ingresosTotales}
+              />
+            ) : (
             <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <PageHeader
-                eyebrow="Operacion en tiempo real"
-                title={`${globalConfig?.nombreEmpresa || 'Tulum Core'} listo para operar`}
-                description="Panel ejecutivo para seguir ventas, caja, stock y actividad comercial sin perder foco operativo."
-                icon={BarChart3}
+                description="Ventas, caja, stock y actividad del turno."
                 meta={
                   <div className="flex flex-wrap gap-2">
                     {!esPreventista && (
@@ -1083,7 +930,7 @@ export const Dashboard: React.FC = () => {
 
               <AlertasStock />
 
-              {!esPreventista && (
+              {!esPreventista && esRestaurante && (
                 <button
                   type="button"
                   onClick={() => handleTabChange('pedidos')}
@@ -1152,7 +999,7 @@ export const Dashboard: React.FC = () => {
                                       {estado === 'PENDIENTE' && mpHabilitado && (
                                         <button
                                           onClick={() => handleCobrar(col.id)}
-                                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-blue-700 transition-all shadow-sm"
+                                          className="flex items-center gap-1.5 px-3 py-1.5 bg-tulum-accent text-white text-[10px] font-semibold uppercase rounded-lg hover:bg-tulum-accent-hover transition-colors"
                                         >
                                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
                                           Cobrar
@@ -1200,6 +1047,7 @@ export const Dashboard: React.FC = () => {
                 </div>
               </section>
             </div>
+            )
           )}
 
           {/* TAB: VENTAS HISTORIAL */}
@@ -1568,7 +1416,7 @@ export const Dashboard: React.FC = () => {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
           <div className="w-full max-w-2xl max-h-[85vh] bg-white shadow-2xl rounded-2xl animate-in zoom-in-95 duration-300 flex flex-col">
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-lg font-black text-slate-800 tracking-tight">Historial de Cierres</h2>
+              <h2 className="text-lg font-semibold text-slate-800 tracking-tight">Turnos</h2>
               <button onClick={() => setIsHistorialCajasOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
@@ -1577,7 +1425,7 @@ export const Dashboard: React.FC = () => {
               {!Array.isArray(historialCajas) || historialCajas.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
                   <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-                  <p className="text-sm font-bold">No hay cierres registrados</p>
+                  <p className="text-sm font-bold">No hay turnos registrados</p>
                 </div>
               ) : (
                 historialCajas.map((c: any) => (

@@ -140,7 +140,7 @@ export const CreateCategoryForm: React.FC<CreateCategoryProps> = ({
             ))}
           </select>
           <p className="mt-1 text-xs text-slate-400">
-            Se muestra junto a las cantidades de los productos de esta categoría.
+            Se muestra junto al stock. Para queso o fiambre usá gramos o kilos.
           </p>
           {errors.unidadMedida && (
             <p className="mt-1 text-xs font-medium text-red-500">{errors.unidadMedida.message}</p>
