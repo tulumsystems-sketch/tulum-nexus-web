@@ -395,6 +395,8 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = (props) => {
       buildGroups(props)
         .map((group) => ({ ...group, items: group.items.filter((item) => item.show) }))
         .filter((group) => group.items.length > 0),
+    // props se reconstruye cada render; las flags de menú son lo que cambia el nav.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       props.esRestaurante,
       props.esAdmin,

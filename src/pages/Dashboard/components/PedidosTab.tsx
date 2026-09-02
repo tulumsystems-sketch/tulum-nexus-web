@@ -338,6 +338,8 @@ export const PedidosTab: React.FC = () => {
       window.clearTimeout(limpiaAviso);
       window.clearTimeout(limpiaNuevos);
     };
+    // firmaCocina resume cocina (ids, estado, mesa, ítems) sin re-disparar en cada poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firmaCocina]);
 
   const cambiarEstado = async (pedido: Pedido, estado: string) => {

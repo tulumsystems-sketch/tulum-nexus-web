@@ -31,7 +31,10 @@ export const PosRestaurante: React.FC<{ nombreEmpresa?: string }> = ({ nombreEmp
   const [abriendoId, setAbriendoId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const mesas: MesaMostrador[] = Array.isArray(data) ? data.filter((m: MesaMostrador) => m) : [];
+  const mesas: MesaMostrador[] = useMemo(
+    () => (Array.isArray(data) ? data.filter((m: MesaMostrador) => m) : []),
+    [data]
+  );
   const ocupadas = useMemo(
     () => mesas.filter((m) => m.estado === 'OCUPADA').sort((a, b) => a.numero - b.numero),
     [mesas]

@@ -17,7 +17,6 @@ import {
   PanelLeft,
   PanelLeftClose,
   TrendingUp,
-  User,
   X,
 } from 'lucide-react';
 import apiClient from '../../api/axiosConfig';
