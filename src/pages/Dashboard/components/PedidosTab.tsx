@@ -420,6 +420,27 @@ export const PedidosTab: React.FC = () => {
     }
   };
 
+  const eliminarPedido = async (pedido: Pedido) => {
+    const codigo = pedido.nroComprobante || pedido.id;
+    if (!window.confirm(`¿Eliminar el pedido #${codigo}? Se anula, vuelve el stock y sale de cocina.`)) {
+      return;
+    }
+    setGuardandoId(pedido.id);
+    setFeedback(null);
+    try {
+      await apiClient.put(`/ventas/${pedido.id}/anular`);
+      await mutate();
+      setFeedback({ type: 'success', message: `Pedido #${codigo} eliminado.` });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.response?.data?.message || 'No pudimos eliminar el pedido.',
+      });
+    } finally {
+      setGuardandoId(null);
+    }
+  };
+
   const renderCard = (pedido: Pedido) => (
     <PedidoCard
       key={pedido.id}
@@ -433,6 +454,7 @@ export const PedidosTab: React.FC = () => {
       onCobrar={() => marcarCobrado(pedido, true)}
       onEditar={() => setEditando(pedido)}
       onLiberar={pedido.puedeLiberar ? () => devolverACola(pedido) : undefined}
+      onEliminar={() => eliminarPedido(pedido)}
       cadetes={Array.isArray(cadetes) ? cadetes : []}
       onDespachar={despachar}
     />
@@ -628,9 +650,10 @@ const PedidoCard: React.FC<{
   onCobrar: () => void;
   onEditar: () => void;
   onLiberar?: () => void;
+  onEliminar: () => void;
   cadetes: { id: number; nombreVisible?: string; email?: string }[];
   onDespachar: (pedido: Pedido, repartidorUsuarioId?: number) => void;
-}> = ({ pedido, esNuevo, esActualizado, hace, guardando, onImprimir, onCambiarEstado, onCobrar, onEditar, onLiberar, cadetes, onDespachar }) => {
+}> = ({ pedido, esNuevo, esActualizado, hace, guardando, onImprimir, onCambiarEstado, onCobrar, onEditar, onLiberar, onEliminar, cadetes, onDespachar }) => {
   const [cadeteId, setCadeteId] = useState('');
   const [abierto, setAbierto] = useState(esNuevo);
   const salon = esPedidoSalon(pedido);
@@ -651,7 +674,7 @@ const PedidoCard: React.FC<{
     : esActualizado
       ? 'border-sky-400/50 ring-1 ring-sky-400/25 bg-slate-900'
       : tonoEspera(pedido.fecha);
-  const proximos = (pedido.proximosEstados || []).filter((estado) => estado !== 'EN_CAMINO');
+  const proximos = (pedido.proximosEstados || []).filter((estado) => estado !== 'EN_CAMINO' && estado !== 'ANULADA');
   const notaGeneral = pedido.observaciones && !pedido.observaciones.startsWith('Cuenta abierta')
     ? pedido.observaciones
     : '';
@@ -744,6 +767,17 @@ const PedidoCard: React.FC<{
           >
             <Printer className="h-3.5 w-3.5" />
           </button>
+          {activo && (
+            <button
+              type="button"
+              disabled={guardando}
+              onClick={onEliminar}
+              className="inline-flex items-center justify-center rounded-lg border border-red-500/40 bg-red-500/10 p-1.5 text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+              title="Eliminar pedido"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
           {proximos.map((estado) => (
             <button
               key={estado}
@@ -897,6 +931,17 @@ const PedidoCard: React.FC<{
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] font-black text-slate-300 hover:bg-slate-800 disabled:opacity-50"
                 >
                   Devolver a cola
+                </button>
+              )}
+              {activo && (
+                <button
+                  type="button"
+                  disabled={guardando}
+                  onClick={onEliminar}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-[11px] font-black text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {guardando ? '...' : 'Eliminar'}
                 </button>
               )}
             </div>
