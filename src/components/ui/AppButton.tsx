@@ -9,11 +9,11 @@ interface AppButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-700',
-  secondary: 'bg-slate-900 text-slate-200 border border-slate-700 shadow-black/20 hover:bg-slate-800',
-  danger: 'bg-red-600 text-white shadow-red-500/20 hover:bg-red-700',
-  success: 'bg-emerald-600 text-white shadow-emerald-500/20 hover:bg-emerald-700',
-  dark: 'bg-slate-950 text-white shadow-slate-500/20 hover:bg-slate-800',
+  primary: 'bg-tulum-accent text-white hover:bg-tulum-accent-hover',
+  secondary: 'border border-tulum-border bg-tulum-elevated text-tulum-bone hover:bg-tulum-surface',
+  danger: 'bg-tulum-danger text-white hover:opacity-90',
+  success: 'bg-tulum-success text-white hover:opacity-90',
+  dark: 'border border-tulum-border bg-tulum-ink text-tulum-bone hover:bg-tulum-elevated',
 };
 
 export const AppButton: React.FC<AppButtonProps> = ({
@@ -24,7 +24,7 @@ export const AppButton: React.FC<AppButtonProps> = ({
   ...props
 }) => (
   <button
-    className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+    className={`inline-flex items-center justify-center gap-2 rounded px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
     {...props}
   >
     {Icon && <Icon className="h-4 w-4" />}

@@ -1,11 +1,12 @@
 import React, { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { IdleSessionGuard } from '../IdleSessionGuard';
+import { homePathForRol } from '../../utils/session';
 
 interface ProtectedRouteProps {
   children: ReactNode;
   requiredRol?: string;
-  /** Roles que no pueden acceder a la ruta, aunque estén logueados. */
+  /** Roles that cannot access this route even if logged in. */
   rolesBloqueados?: string[];
 }
 
@@ -18,11 +19,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
   }
 
   if (requiredRol && userRole !== requiredRol) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={homePathForRol(userRole)} replace />;
   }
 
   if (rolesBloqueados && userRole && rolesBloqueados.includes(userRole)) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={homePathForRol(userRole)} replace />;
   }
 
   return <IdleSessionGuard>{children}</IdleSessionGuard>;

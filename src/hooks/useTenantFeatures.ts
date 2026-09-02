@@ -1,7 +1,7 @@
 import useSWR, { mutate as mutateGlobal } from 'swr';
 import apiClient from '../api/axiosConfig';
 
-export type FeatureKey = 'POS_BARCODE' | 'WHATSAPP_BOT' | 'CUSTOMER_CATALOG' | 'PAYMENT_LINKS';
+export type FeatureKey = 'POS_BARCODE' | 'WHATSAPP_BOT' | 'CUSTOMER_CATALOG' | 'PAYMENT_LINKS' | 'MESAS';
 
 type TenantFeatures = Record<FeatureKey, boolean>;
 

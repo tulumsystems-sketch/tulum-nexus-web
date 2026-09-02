@@ -1,0 +1,15 @@
+export type TabType =
+  | 'dashboard'
+  | 'categories'
+  | 'products'
+  | 'clients'
+  | 'sales'
+  | 'settings'
+  | 'usuarios'
+  | 'remitos'
+  | 'pedidos'
+  | 'mesas'
+  | 'proveedores'
+  | 'compras'
+  | 'movimientos'
+  | 'auditoria';

@@ -5,21 +5,26 @@ import * as yup from 'yup';
 import useSWR from 'swr';
 import apiClient from '../../../api/axiosConfig';
 import { calcularPrecioVenta, getMargenPorDefecto } from '../../../utils/tenantConfig';
-import { getSufijoUnidad } from '../../../utils/unidadMedida';
+import { esInsumo, getSufijoUnidad, getUnidadDeProducto } from '../../../utils/unidadMedida';
+import { useTenantFeatures } from '../../../hooks/useTenantFeatures';
+
+export type ProductoFormModo = 'carta' | 'deposito';
 
 export interface CreateProductProps {
   onProductCreated: () => void;
   initialData?: any;
   onCancelEdit?: () => void;
+  /** Fogón: Carta arma platos; Depósito carga insumos y bebidas. */
+  modo?: ProductoFormModo;
 }
 
 export interface ProductFormInputs {
   nombre: string;
   descripcion?: string;
-  precio: number;
+  precio?: number;
   precioCosto?: number;
   margenPorcentaje?: number;
-  cantidadStock: number;
+  cantidadStock?: number;
   medidas?: string;
   categoriaId: number;
   imageUrl?: string;
@@ -43,8 +48,8 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
   precio: yup
     .number()
     .transform((value) => (isNaN(value) ? undefined : value))
-    .required('El precio es obligatorio.')
-    .positive('El precio debe ser mayor a 0.'),
+    .min(0, 'El precio no puede ser negativo.')
+    .optional(),
   precioCosto: yup
     .number()
     .transform((value) => (isNaN(value) ? undefined : value))
@@ -58,8 +63,8 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
   cantidadStock: yup
     .number()
     .transform((value) => (isNaN(value) ? undefined : value))
-    .required('La cantidad en stock es obligatoria.')
-    .min(0, 'La cantidad no puede ser negativa.'),
+    .min(0, 'La cantidad no puede ser negativa.')
+    .optional(),
   medidas: yup.string().optional(),
   categoriaId: yup
     .number()
@@ -76,15 +81,26 @@ const productSchema: yup.ObjectSchema<ProductFormInputs> = yup.object().shape({
 
 const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 
-export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreated, initialData, onCancelEdit }) => {
+export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreated, initialData, onCancelEdit, modo }) => {
   const [apiError, setApiError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [tipo, setTipo] = useState<'ELABORADO' | 'INSUMO'>('ELABORADO');
+  const [vendible, setVendible] = useState(true);
+  const [receta, setReceta] = useState<{ insumoId: string; cantidad: string }[]>([
+    { insumoId: '', cantidad: '' },
+  ]);
 
   // Carga asíncrona de categorías
   const { data: categorias, isLoading: isLoadingCategorias, error: categoriesError } = useSWR('/categorias', fetcher);
   const { data: globalConfig } = useSWR('/config', fetcher);
+  const { data: catalogo } = useSWR('/productos', fetcher);
+  const { isFeatureEnabled } = useTenantFeatures();
+  const esRestaurante = isFeatureEnabled('MESAS');
+  const modoDeposito = esRestaurante && modo === 'deposito';
+  const modoCarta = esRestaurante && modo === 'carta';
+  const seVende = !modoDeposito || vendible;
 
   const margenPorDefecto = getMargenPorDefecto(globalConfig);
   const usaMargenAutomatico = margenPorDefecto !== null;
@@ -121,6 +137,12 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
     return categoria ? getSufijoUnidad(categoria.unidadMedida) : null;
   }, [categorias, categoriaIdActual]);
 
+  const insumos = React.useMemo(() => {
+    const lista = Array.isArray(catalogo) ? catalogo : [];
+    return lista.filter((p: any) => esInsumo(p) && (!initialData?.id || p.id !== initialData.id));
+  }, [catalogo, initialData]);
+  const recetaArmada = tipo === 'ELABORADO' && receta.some((l) => l.insumoId && Number(l.cantidad) > 0);
+
   // Editando un producto viejo sin costo no podemos derivar nada: avisamos y respetamos el precio.
   const faltaCostoEnProductoExistente = Boolean(initialData) && initialData?.precioCosto == null;
 
@@ -138,6 +160,20 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         stockMinimo: initialData.stockMinimo ?? 0,
       });
       setPreviewUrl(initialData.imageUrl || null);
+      const tipoInicial = modo === 'deposito'
+        ? 'INSUMO'
+        : modo === 'carta'
+          ? 'ELABORADO'
+          : (esInsumo(initialData) ? 'INSUMO' : 'ELABORADO');
+      setTipo(tipoInicial);
+      setVendible(initialData.vendible !== false);
+      const lineas = Array.isArray(initialData.receta) && initialData.receta.length > 0
+        ? initialData.receta.map((l: any) => ({
+            insumoId: String(l.insumoId ?? ''),
+            cantidad: l.cantidad != null ? String(l.cantidad) : '',
+          }))
+        : [{ insumoId: '', cantidad: '' }];
+      setReceta(lineas);
       // El precio guardado manda hasta que se toque el costo.
       setPrecioPisado(true);
     } else {
@@ -154,9 +190,12 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
       });
       setPreviewUrl(null);
       setPrecioPisado(false);
+      setTipo(modo === 'deposito' ? 'INSUMO' : 'ELABORADO');
+      setVendible(modo !== 'deposito');
+      setReceta([{ insumoId: '', cantidad: '' }]);
     }
     setSelectedFile(null);
-  }, [initialData, reset]);
+  }, [initialData, reset, modo]);
 
   // El precio de venta se recalcula solo mientras no lo hayan pisado a mano.
   useEffect(() => {
@@ -205,18 +244,50 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         }
       }
 
-      const payload = {
+      const tipoFinal: 'ELABORADO' | 'INSUMO' = esRestaurante
+        ? (modo === 'deposito' ? 'INSUMO' : modo === 'carta' ? 'ELABORADO' : tipo)
+        : ((initialData?.tipo as 'ELABORADO' | 'INSUMO') || 'ELABORADO');
+      const vendibleFinal = !esRestaurante
+        ? true
+        : modo === 'deposito'
+          ? vendible
+          : modo === 'carta'
+            ? true
+            : tipoFinal !== 'INSUMO';
+
+      const recetaPayload = tipoFinal === 'INSUMO'
+        ? []
+        : receta
+            .map((linea) => ({
+              insumoId: Number(linea.insumoId),
+              cantidad: Number(linea.cantidad),
+            }))
+            .filter((linea) => linea.insumoId > 0 && linea.cantidad > 0);
+
+      if (vendibleFinal && (!data.precio || Number(data.precio) <= 0)) {
+        setApiError(modoDeposito
+          ? 'Si se vende en la carta, necesita un precio de venta.'
+          : 'El plato de la carta necesita un precio de venta.');
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
         nombre: data.nombre,
         descripcion: data.descripcion,
-        precio: data.precio,
+        precio: vendibleFinal ? data.precio : (data.precio ?? 0),
         precioCosto: data.precioCosto ?? null,
         margenPorcentaje: data.margenPorcentaje ?? null,
-        cantidadStock: data.cantidadStock,
+        cantidadStock: recetaPayload.length > 0 ? 0 : (data.cantidadStock ?? 0),
         medidas: data.medidas,
         categoriaId: data.categoriaId,
         stockMinimo: data.stockMinimo ?? 0,
         imageUrl: finalImageUrl,
+        tipo: tipoFinal,
+        vendible: vendibleFinal,
       };
+      if (esRestaurante) {
+        payload.receta = recetaPayload;
+      }
 
       if (initialData && initialData.id) {
         await apiClient.put(`/productos/${initialData.id}`, payload);
@@ -242,17 +313,22 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
     }
   };
 
-  const inputClass = (hasError?: boolean) =>
-    `w-full px-4 py-3 text-base text-slate-700 bg-slate-50 border rounded-xl focus:outline-none focus:ring-2 transition-colors ${
-      hasError ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
-    }`;
-
   return (
-    <div className="w-full p-6 sm:p-8 mb-2 bg-white border border-gray-100 rounded-2xl shadow-sm">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-2xl font-black text-slate-800">{initialData ? 'Editar Producto' : 'Crear Nuevo Producto'}</h2>
+    <div className="w-full p-4 sm:p-6 mb-8 bg-white border border-gray-100 rounded-xl shadow-sm transition-all duration-300 hover:shadow-md">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-slate-800">
+          {modoDeposito
+            ? (initialData ? 'Editar artículo de stock' : 'Nuevo artículo de stock')
+            : modoCarta
+              ? (initialData ? 'Editar plato de la carta' : 'Nuevo plato de la carta')
+              : esRestaurante
+                ? (initialData
+                  ? (tipo === 'INSUMO' ? 'Editar materia prima' : 'Editar plato de la carta')
+                  : (tipo === 'INSUMO' ? 'Nueva materia prima' : 'Nuevo plato de la carta'))
+                : (initialData ? 'Editar producto' : 'Nuevo producto')}
+        </h2>
         {initialData && (
-          <button type="button" onClick={onCancelEdit} className="text-sm font-semibold text-slate-400 hover:text-slate-200">
+          <button type="button" onClick={onCancelEdit} className="text-sm font-semibold text-slate-400 hover:text-slate-600">
             Cancelar Edición
           </button>
         )}
@@ -270,25 +346,91 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
         </div>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+        {esRestaurante && !modoCarta && !modoDeposito && (
+          <>
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-1">
+          <button
+            type="button"
+            onClick={() => setTipo('ELABORADO')}
+            className={`rounded-lg px-3 py-2 text-sm font-bold ${
+              tipo === 'ELABORADO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            Carta
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTipo('INSUMO');
+              setReceta([{ insumoId: '', cantidad: '' }]);
+            }}
+            className={`rounded-lg px-3 py-2 text-sm font-bold ${
+              tipo === 'INSUMO' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            Materia prima
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">
+          {tipo === 'INSUMO'
+            ? 'Queso, salame, pan. El stock se descuenta cuando vendés un plato que lo usa en la receta.'
+            : 'Carlito, sánguche, milanesa. Armá la receta en gramos o unidades: vender 10 sánguches descuenta 1 kg de fiambre y 10 panes, no un stock de sánguches.'}
+        </p>
+          </>
+        )}
+
+        {modoCarta && (
+          <p className="text-xs text-slate-500">
+            Sánguche, asado, milanesa. Armá la receta: al vender se descuenta el fiambre del depósito.
+            Las bebidas y lo que se vende de la heladera van en Stock, con la marca «Se vende».
+          </p>
+        )}
+
+        {modoDeposito && (
+          <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 rounded border-slate-300"
+              checked={vendible}
+              onChange={(e) => setVendible(e.target.checked)}
+            />
+            <span>
+              <span className="block text-sm font-bold text-slate-800">Se vende (sale en la carta)</span>
+              <span className="block text-xs text-slate-500">
+                Marcalo para Coca, agua, cerveza. Dejalo apagado para fiambre, pan o artículos de limpieza.
+              </span>
+            </span>
+          </label>
+        )}
+        
+        {/* Fila 1 */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Nombre del Producto *</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Nombre del Producto *</label>
             <input
               type="text"
               {...register('nombre')}
-              className={inputClass(Boolean(errors.nombre))}
-              placeholder="Ej. Jamón cocido paladini"
+              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                errors.nombre ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+              }`}
+              placeholder={modoDeposito
+                ? 'Ej. Queso, Coca, lavandina'
+                : esRestaurante
+                  ? 'Ej. Carlito, sánguche, asado'
+                  : 'Ej. Silla Ergonómica'}
               disabled={isSubmitting}
             />
-            {errors.nombre && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.nombre.message}</p>}
+            {errors.nombre && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.nombre.message}</p>}
           </div>
 
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Categoría *</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Categoría *</label>
             <select
               {...register('categoriaId')}
-              className={inputClass(Boolean(errors.categoriaId))}
+              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                errors.categoriaId ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+              }`}
               disabled={isSubmitting || isLoadingCategorias}
             >
               <option value="">
@@ -300,29 +442,30 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
                 </option>
               ))}
             </select>
-            {errors.categoriaId && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.categoriaId.message}</p>}
+            {errors.categoriaId && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.categoriaId.message}</p>}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {/* Fila 2: Descripción y URL Imagen */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Imagen del Producto</label>
-            <div className="flex items-stretch gap-4">
-              <label className={`flex-1 min-h-[140px] flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Imagen del Producto</label>
+            <div className="flex items-start gap-4">
+              <label className={`flex-1 flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
                 previewUrl ? 'border-indigo-400 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-500' : 'border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-400'
               }`}>
                 <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isSubmitting || isUploading} />
-                <svg className={`w-10 h-10 mb-2 ${previewUrl ? 'text-indigo-500' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2-2v12a2 2 0 002 2z"></path></svg>
-                <span className={`text-base font-bold ${previewUrl ? 'text-indigo-300' : 'text-slate-200'}`}>
+                <svg className={`w-8 h-8 mb-2 ${previewUrl ? 'text-indigo-500' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2-2v12a2 2 0 002 2z"></path></svg>
+                <span className={`text-sm font-bold ${previewUrl ? 'text-indigo-700' : 'text-slate-600'}`}>
                   {previewUrl ? 'Cambiar Imagen' : 'Subir Imagen'}
                 </span>
-                <span className="text-sm text-slate-400 mt-1 text-center">JPG, PNG o WebP</span>
+                <span className="text-xs text-slate-400 mt-1 text-center">Formato JPG, PNG, WebP</span>
               </label>
 
               {previewUrl && (
-                <div className="relative w-36 h-36 rounded-2xl overflow-hidden border-2 border-slate-200 flex-shrink-0 bg-slate-100 shadow-sm group">
+                <div className="relative w-24 h-24 rounded-xl overflow-hidden border-2 border-slate-200 flex-shrink-0 bg-slate-100 shadow-sm group">
                   <img src={previewUrl} alt="Preview" className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                  <button type="button" onClick={clearFile} disabled={isSubmitting || isUploading} className="absolute top-2 right-2 bg-white/90 text-red-500 rounded-full p-1.5 hover:bg-red-50 hover:text-red-600 transition-colors shadow-sm focus:outline-none">
+                  <button type="button" onClick={clearFile} disabled={isSubmitting || isUploading} className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1 hover:bg-red-50 hover:text-red-600 transition-colors shadow-sm focus:outline-none">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
                   </button>
                 </div>
@@ -331,15 +474,17 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
           
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Descripción</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Descripción</label>
             <textarea
               {...register('descripcion')}
-              rows={5}
-              className={`${inputClass(Boolean(errors.descripcion))} min-h-[140px] resize-y`}
+              rows={2}
+              className={`w-full px-4 py-2 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                errors.descripcion ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+              }`}
                placeholder="Detalles acerca del producto..."
                disabled={isSubmitting}
             />
-            {errors.descripcion && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.descripcion.message}</p>}
+            {errors.descripcion && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.descripcion.message}</p>}
           </div>
         </div>
 
@@ -351,42 +496,46 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Precio de Costo</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Precio de Costo</label>
             <div className="relative">
-              <span className="absolute left-3 top-3.5 text-slate-400 font-medium">$</span>
+              <span className="absolute left-3 top-2.5 text-slate-400 font-medium">$</span>
               <input
                 type="number"
                 step="0.01"
                 {...register('precioCosto', { onChange: () => setPrecioPisado(false) })}
-                className={`${inputClass(Boolean(errors.precioCosto))} pl-8`}
+                className={`w-full pl-8 pr-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                  errors.precioCosto ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+                }`}
                 placeholder="0.00"
                 disabled={isSubmitting}
               />
             </div>
             {errors.precioCosto
-              ? <p className="mt-1.5 text-sm font-medium text-red-400">{errors.precioCosto.message}</p>
-              : <p className="mt-1.5 text-sm text-slate-400">Lo que te cuesta el producto.</p>}
+              ? <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.precioCosto.message}</p>
+              : <p className="mt-1 text-xs text-slate-400">Lo que te cuesta el producto.</p>}
           </div>
 
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Margen (%)</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Margen (%)</label>
             <div className="relative">
               <input
                 type="number"
                 step="0.01"
                 {...register('margenPorcentaje', { onChange: () => setPrecioPisado(false) })}
-                className={`${inputClass(Boolean(errors.margenPorcentaje))} pr-9`}
+                className={`w-full px-4 py-2.5 pr-9 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                  errors.margenPorcentaje ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+                }`}
                 placeholder={usaMargenAutomatico ? String(margenPorDefecto) : 'Sin margen'}
                 disabled={isSubmitting}
               />
-              <span className="absolute right-3 top-3.5 text-slate-400 font-medium">%</span>
+              <span className="absolute right-3 top-2.5 text-slate-400 font-medium">%</span>
             </div>
             {errors.margenPorcentaje
-              ? <p className="mt-1.5 text-sm font-medium text-red-400">{errors.margenPorcentaje.message}</p>
+              ? <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.margenPorcentaje.message}</p>
               : (
-                <p className="mt-1.5 text-sm text-slate-400">
+                <p className="mt-1 text-xs text-slate-400">
                   {usaMargenAutomatico
                     ? `Vacío usa el ${margenPorDefecto}% configurado para el negocio.`
                     : 'Sin margen configurado: cargá el precio de venta a mano.'}
@@ -395,30 +544,34 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
 
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Precio de Venta *</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">
+              {seVende ? 'Precio de Venta *' : 'Precio de venta'}
+            </label>
             <div className="relative">
-              <span className="absolute left-3 top-3.5 text-slate-400 font-medium">$</span>
+              <span className="absolute left-3 top-2.5 text-slate-400 font-medium">$</span>
               <input
                 type="number"
                 step="0.01"
                 {...register('precio', { onChange: () => setPrecioPisado(true) })}
-                className={`${inputClass(Boolean(errors.precio))} pl-8 font-bold`}
+                className={`w-full pl-8 pr-4 py-2.5 font-bold text-slate-800 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                  errors.precio ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+                }`}
                 placeholder="0.00"
                 disabled={isSubmitting}
               />
             </div>
-            {errors.precio && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.precio.message}</p>}
+            {errors.precio && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.precio.message}</p>}
             {!errors.precio && precioSugerido !== null && (
               precioPisado ? (
                 <button
                   type="button"
                   onClick={() => setPrecioPisado(false)}
-                  className="mt-1.5 text-sm font-bold text-indigo-400 hover:text-indigo-200 hover:underline"
+                  className="mt-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
                 >
                   Recalcular con el margen: ${precioSugerido.toFixed(2)}
                 </button>
               ) : (
-                <p className="mt-1.5 text-sm font-semibold text-emerald-400">
+                <p className="mt-1 text-xs font-semibold text-emerald-600">
                   Calculado con {margenAplicado}% sobre el costo. Podés editarlo.
                 </p>
               )
@@ -426,51 +579,149 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {esRestaurante && !modoDeposito && tipo !== 'INSUMO' && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold text-slate-800">Receta por unidad vendida</p>
+                <p className="text-xs text-slate-500">
+                  Cantidad en la unidad de cada insumo. Si el queso está en gramos, poné 100. Si está en kg, poné 0.1.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReceta((prev) => [...prev, { insumoId: '', cantidad: '' }])}
+                className="text-xs font-bold text-blue-600 hover:underline"
+              >
+                + Ingrediente
+              </button>
+            </div>
+            {insumos.length === 0 ? (
+              <p className="text-xs font-semibold text-amber-700">
+                Primero cargá artículos en Stock (queso, salame, pan) y después armá el plato.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {receta.map((linea, index) => {
+                  const insumo = insumos.find((p: any) => String(p.id) === String(linea.insumoId));
+                  return (
+                    <div key={`${index}-${linea.insumoId}`} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+                      <select
+                        value={linea.insumoId}
+                        onChange={(e) =>
+                          setReceta((prev) =>
+                            prev.map((l, i) => (i === index ? { ...l, insumoId: e.target.value } : l))
+                          )
+                        }
+                        className="sm:col-span-7 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="">Elegí insumo</option>
+                        {insumos.map((p: any) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre} ({getSufijoUnidad(getUnidadDeProducto(p))})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="sm:col-span-4 relative">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.001"
+                          value={linea.cantidad}
+                          onChange={(e) =>
+                            setReceta((prev) =>
+                              prev.map((l, i) => (i === index ? { ...l, cantidad: e.target.value } : l))
+                            )
+                          }
+                          placeholder="100"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-10 text-sm"
+                        />
+                        <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">
+                          {insumo ? getSufijoUnidad(getUnidadDeProducto(insumo)) : ''}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReceta((prev) =>
+                            prev.length === 1
+                              ? [{ insumoId: '', cantidad: '' }]
+                              : prev.filter((_, i) => i !== index)
+                          )
+                        }
+                        className="sm:col-span-1 text-xs font-bold text-red-500"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Fila 4: Stock, Stock Minimo y Medidas */}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">
-              Stock *{unidadCategoria ? <span className="ml-1 font-normal text-slate-400">(en {unidadCategoria})</span> : null}
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">
+              Stock{unidadCategoria ? <span className="ml-1 font-normal text-slate-400">(en {unidadCategoria})</span> : null}
             </label>
-            <input
-              type="number"
-              {...register('cantidadStock')}
-              className={inputClass(Boolean(errors.cantidadStock))}
-              placeholder="0"
-              disabled={isSubmitting}
-            />
-            {errors.cantidadStock && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.cantidadStock.message}</p>}
+            {recetaArmada ? (
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-500">
+                No se stockea el plato. Al vender se descuentan los insumos de la receta.
+              </p>
+            ) : (
+              <>
+                <input
+                  type="number"
+                  step="0.001"
+                  {...register('cantidadStock')}
+                  className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                    errors.cantidadStock ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+                  }`}
+                  placeholder="0"
+                  disabled={isSubmitting}
+                />
+                {errors.cantidadStock && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.cantidadStock.message}</p>}
+              </>
+            )}
           </div>
 
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Stock Mínimo</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Stock Mínimo</label>
             <input
               type="number"
               {...register('stockMinimo')}
-              className={inputClass(Boolean(errors.stockMinimo))}
+              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                errors.stockMinimo ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+              }`}
               placeholder="0"
               disabled={isSubmitting}
             />
-            {errors.stockMinimo && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.stockMinimo.message}</p>}
+            {errors.stockMinimo && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.stockMinimo.message}</p>}
           </div>
 
           <div>
-            <label className="block mb-2 text-sm font-bold text-slate-200">Medidas</label>
+            <label className="block mb-1.5 text-sm font-semibold text-slate-700">Medidas</label>
             <input
               type="text"
               {...register('medidas')}
-              className={inputClass(Boolean(errors.medidas))}
+              className={`w-full px-4 py-2.5 text-slate-700 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                errors.medidas ? 'border-red-400 focus:ring-red-400 bg-red-50/20' : 'border-slate-200 focus:ring-blue-500 hover:bg-white'
+              }`}
               placeholder="Ej. 10x20x30 cm"
               disabled={isSubmitting}
             />
-            {errors.medidas && <p className="mt-1.5 text-sm font-medium text-red-400">{errors.medidas.message}</p>}
+            {errors.medidas && <p className="mt-1 text-xs font-medium text-red-500 animate-pulse">{errors.medidas.message}</p>}
           </div>
         </div>
 
-        <div className="flex justify-end pt-6 mt-2 border-t border-slate-700">
+        <div className="flex justify-end pt-4 mt-2 border-t border-slate-100">
           <button
             type="submit"
             disabled={isSubmitting || isUploading}
-            className={`flex items-center gap-2 px-8 py-3 text-base font-bold text-white transition-all rounded-xl shadow disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`flex items-center gap-2 px-6 py-2.5 font-bold text-white transition-all rounded-lg shadow disabled:opacity-50 disabled:cursor-not-allowed ${
               isUploading ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md'
             }`}
           >
@@ -480,9 +731,9 @@ export const CreateProductForm: React.FC<CreateProductProps> = ({ onProductCreat
                 {isUploading ? 'Subiendo...' : 'Guardando...'}
               </>
             ) : initialData ? (
-               'Actualizar Producto'
+               modoDeposito ? 'Actualizar artículo' : modoCarta ? 'Actualizar plato' : 'Actualizar Producto'
             ) : (
-               'Guardar Producto'
+               modoDeposito ? 'Guardar artículo' : modoCarta ? 'Guardar plato' : 'Guardar Producto'
             )}
           </button>
         </div>

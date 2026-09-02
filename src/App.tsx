@@ -6,6 +6,16 @@ import { ProtectedRoute } from './components/ProtectedRoute/ProtectedRoute';
 import { LaunchAnnouncement } from './components/LaunchAnnouncement';
 import { POS } from './pages/POS/POS';
 import { SuperAdminPanel } from './pages/SuperAdmin/SuperAdminPanel';
+import { SalidaRider } from './pages/Salida/SalidaRider';
+import { homePathForRol } from './utils/session';
+
+const RedirectHome: React.FC = () => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return <Navigate to={homePathForRol(localStorage.getItem('rol'))} replace />;
+};
 
 const App: React.FC = () => {
   return (
@@ -19,8 +29,17 @@ const App: React.FC = () => {
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute rolesBloqueados={['REPARTIDOR']}>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/salida"
+          element={
+            <ProtectedRoute requiredRol="REPARTIDOR">
+              <SalidaRider />
             </ProtectedRoute>
           }
         />
@@ -38,14 +57,14 @@ const App: React.FC = () => {
         <Route
           path="/pos"
           element={
-            <ProtectedRoute rolesBloqueados={['PREVENTISTA']}>
+            <ProtectedRoute rolesBloqueados={['PREVENTISTA', 'REPARTIDOR']}>
               <POS />
             </ProtectedRoute>
           }
         />
 
         {/* Redirección Catch-All (Default de / a /dashboard) */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<RedirectHome />} />
       </Routes>
     </BrowserRouter>
   );

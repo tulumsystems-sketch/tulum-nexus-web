@@ -4,29 +4,23 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import apiClient from '../../api/axiosConfig';
+import { homePathForRol } from '../../utils/session';
+import { AppButton } from '../../components/ui/AppButton';
+import { ErrorAlert } from '../../components/ui/ErrorAlert';
+import { fieldClass, labelClass } from '../../components/ui/fieldStyles';
 
-/**
- * Interfaces
- */
 export interface LoginFormInputs {
   tenant: string;
   email: string;
   password: string;
 }
 
-/**
- * Validación Declarativa (Yup) - Separada del componente UI
- */
 const loginSchema: yup.ObjectSchema<LoginFormInputs> = yup.object().shape({
-  tenant: yup.string().required('El nombre de la Empresa (Tenant) es obligatorio.'),
-  email: yup.string().email('Debe ser un correo electrónico válido.').required('El correo electrónico es obligatorio.'),
+  tenant: yup.string().required('El comercio es obligatorio.'),
+  email: yup.string().email('Debe ser un correo válido.').required('El usuario es obligatorio.'),
   password: yup.string().required('La contraseña es obligatoria.'),
 });
 
-/**
- * Componente Login
- * Implementado usando Functional Hooks y React Hook Form conforme a las reglas.
- */
 export const Login: React.FC = () => {
   const navigate = useNavigate();
   const [apiError, setApiError] = useState<string | null>(null);
@@ -39,9 +33,6 @@ export const Login: React.FC = () => {
     resolver: yupResolver(loginSchema),
   });
 
-  /**
-   * Manejador central del submit
-   */
   const onSubmit: SubmitHandler<LoginFormInputs> = async (data) => {
     setApiError(null);
     try {
@@ -51,16 +42,17 @@ export const Login: React.FC = () => {
         password: data.password,
       });
 
-      const { token, rol, tenant, email, inactividadMinutos } = response.data;
+      const { token, rol, tenant, email, userId, inactividadMinutos } = response.data;
 
       localStorage.setItem('token', token);
       localStorage.setItem('tenant', tenant);
       localStorage.setItem('rol', rol);
       localStorage.setItem('email', email);
+      if (userId != null) localStorage.setItem('userId', String(userId));
       localStorage.setItem('inactividadMinutos', String(inactividadMinutos || 30));
       localStorage.setItem('tulum_last_activity', String(Date.now()));
 
-      navigate(rol === 'SUPER_ADMIN' ? '/admin' : '/dashboard');
+      navigate(homePathForRol(rol));
     } catch (err: any) {
       const errorMsg =
         err.response?.data?.error ||
@@ -70,99 +62,70 @@ export const Login: React.FC = () => {
     }
   };
 
+  const inputError = (invalid: boolean) =>
+    `${fieldClass} ${invalid ? 'border-tulum-danger focus:border-tulum-danger focus:ring-tulum-danger/20' : ''}`;
+
   return (
-    <div className="min-h-screen bg-[#0B0F19] flex items-center justify-center relative overflow-hidden px-4">
-      {/* Glow effect behind panel */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
-      
-      <div className="w-full max-w-md bg-[#111622] border border-gray-800 rounded-2xl shadow-2xl p-8 relative z-10">
-        {/* Logo */}
-        <div className="flex justify-center mb-6">
-          <img src="/lOGO tuLUM.png" alt="Tulum" className="h-16 w-auto object-contain" />
-        </div>
-        
-        <h2 className="mb-2 text-2xl font-bold text-center text-white">
-          Tulum Core
-        </h2>
-        <p className="mb-6 text-sm text-center text-gray-400">
-          Ingresa con tu usuario y tenant empresarial
-        </p>
+    <div className="tulum-app min-h-screen bg-tulum-ink flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-2xl border border-tulum-border bg-tulum-surface p-8">
+        <p className="text-[11px] font-medium text-tulum-muted">Tulum Core</p>
+        <h1 className="mt-1 text-xl font-semibold tracking-tight text-tulum-bone">Ingresar</h1>
 
         {apiError && (
-          <div
-            className="p-3 mb-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg"
-            role="alert"
-          >
-            {apiError}
+          <div className="mt-5">
+            <ErrorAlert message={apiError} />
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Campo: Empresa (Tenant) */}
+        <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
           <div>
-            <label className="block mb-1.5 text-sm font-medium text-gray-300">
-              Empresa (Tenant ID) *
-            </label>
+            <label className={labelClass}>Comercio</label>
             <input
               type="text"
               {...register('tenant')}
-              className={`w-full px-4 py-2.5 bg-[#0B0F19] border rounded-lg focus:outline-none focus:ring-1 transition-all text-white placeholder-gray-500 ${
-                errors.tenant ? 'border-red-500 focus:ring-red-500' : 'border-gray-700 focus:border-emerald-500 focus:ring-emerald-500/20'
-              }`}
+              className={inputError(Boolean(errors.tenant))}
               placeholder="ej. mi-empresa"
               disabled={isSubmitting}
+              autoComplete="organization"
             />
             {errors.tenant && (
-              <p className="mt-1.5 text-xs text-red-400">{errors.tenant.message}</p>
+              <p className="mt-1.5 text-xs text-tulum-danger">{errors.tenant.message}</p>
             )}
           </div>
 
-          {/* Campo: Email */}
           <div>
-            <label className="block mb-1.5 text-sm font-medium text-gray-300">
-              Correo Electrónico *
-            </label>
+            <label className={labelClass}>Usuario</label>
             <input
               type="email"
               {...register('email')}
-              className={`w-full px-4 py-2.5 bg-[#0B0F19] border rounded-lg focus:outline-none focus:ring-1 transition-all text-white placeholder-gray-500 ${
-                errors.email ? 'border-red-500 focus:ring-red-500' : 'border-gray-700 focus:border-emerald-500 focus:ring-emerald-500/20'
-              }`}
+              className={inputError(Boolean(errors.email))}
               placeholder="usuario@empresa.com"
               disabled={isSubmitting}
+              autoComplete="username"
             />
             {errors.email && (
-              <p className="mt-1.5 text-xs text-red-400">{errors.email.message}</p>
+              <p className="mt-1.5 text-xs text-tulum-danger">{errors.email.message}</p>
             )}
           </div>
 
-          {/* Campo: Password */}
           <div>
-            <label className="block mb-1.5 text-sm font-medium text-gray-300">
-              Contraseña *
-            </label>
+            <label className={labelClass}>Contraseña</label>
             <input
               type="password"
               {...register('password')}
-              className={`w-full px-4 py-2.5 bg-[#0B0F19] border rounded-lg focus:outline-none focus:ring-1 transition-all text-white placeholder-gray-500 ${
-                errors.password ? 'border-red-500 focus:ring-red-500' : 'border-gray-700 focus:border-emerald-500 focus:ring-emerald-500/20'
-              }`}
+              className={inputError(Boolean(errors.password))}
               placeholder="••••••••"
               disabled={isSubmitting}
+              autoComplete="current-password"
             />
             {errors.password && (
-              <p className="mt-1.5 text-xs text-red-400">{errors.password.message}</p>
+              <p className="mt-1.5 text-xs text-tulum-danger">{errors.password.message}</p>
             )}
           </div>
 
-          {/* Botón de Submit */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full px-4 py-2.5 font-bold text-white transition-all bg-gradient-to-r from-emerald-600 to-cyan-600 rounded-lg hover:from-emerald-500 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20"
-          >
-            {isSubmitting ? 'Verificando...' : 'Ingresar a Tulum Core'}
-          </button>
+          <AppButton type="submit" disabled={isSubmitting} className="w-full">
+            {isSubmitting ? 'Verificando…' : 'Ingresar'}
+          </AppButton>
         </form>
       </div>
     </div>

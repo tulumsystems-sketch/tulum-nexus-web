@@ -2,182 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: dark;
+  --tulum-ink: #0a0e12;
+  --tulum-surface: #12181f;
+  --tulum-elevated: #1a222c;
+  --tulum-border: #2a3542;
+  --tulum-bone: #e8e4dc;
+  --tulum-muted: #8b949e;
+  --tulum-accent: #2a9b8f;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background: var(--tulum-ink);
+  color: var(--tulum-bone);
+  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
-.tulum-dark {
-  color-scheme: dark;
+@layer components {
+  .tulum-field {
+    @apply w-full rounded border border-tulum-border bg-tulum-ink px-3 py-2.5 text-sm font-medium text-tulum-bone outline-none transition-colors placeholder:text-tulum-muted focus:border-tulum-accent focus:ring-2 focus:ring-tulum-accent/20 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .tulum-label {
+    @apply mb-1.5 block text-xs font-semibold text-tulum-muted;
+  }
 }
 
-.tulum-dark .bg-white,
-.tulum-dark .bg-white\/80,
-.tulum-dark .bg-white\/85 {
-  background-color: #0f172a !important;
+.tulum-app input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+.tulum-app select,
+.tulum-app textarea {
+  background-color: var(--tulum-ink);
+  border-color: var(--tulum-border);
+  color: var(--tulum-bone);
 }
 
-.tulum-dark .bg-slate-50,
-.tulum-dark .bg-slate-50\/30,
-.tulum-dark .bg-slate-50\/40,
-.tulum-dark .bg-slate-50\/50,
-.tulum-dark .bg-slate-50\/70,
-.tulum-dark .bg-slate-50\/80 {
-  background-color: #111827 !important;
+.tulum-app input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):focus,
+.tulum-app select:focus,
+.tulum-app textarea:focus {
+  border-color: var(--tulum-accent);
+  outline: none;
 }
 
-.tulum-dark .bg-slate-100,
-.tulum-dark .bg-slate-100\/80 {
-  background-color: #1e293b !important;
+.tulum-app input::placeholder,
+.tulum-app textarea::placeholder {
+  color: var(--tulum-muted);
 }
 
-.tulum-dark .from-slate-100 {
-  --tw-gradient-from: #1e293b var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgb(30 41 59 / 0) var(--tw-gradient-to-position) !important;
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+.tulum-app option {
+  background-color: var(--tulum-surface);
+  color: var(--tulum-bone);
 }
 
-.tulum-dark .from-slate-50 {
-  --tw-gradient-from: #111827 var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgb(17 24 39 / 0) var(--tw-gradient-to-position) !important;
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+.tulum-app input[type='checkbox'],
+.tulum-app input[type='radio'] {
+  accent-color: var(--tulum-accent);
 }
 
-.tulum-dark .to-white {
-  --tw-gradient-to: #0f172a var(--tw-gradient-to-position) !important;
+.tulum-app table {
+  color: var(--tulum-bone);
 }
 
-.tulum-dark .bg-blue-50,
-.tulum-dark .bg-blue-50\/30 {
-  background-color: rgba(37, 99, 235, 0.14) !important;
+/*
+  Puente del corte 1. El kit y el chrome ya usan tokens.
+  Pantallas de back-office todavía traen utilidades claras (bg-white, text-slate-800).
+  Esto las apoya sobre la paleta Tulum. Se apaga en el corte 2, cuando esas vistas
+  se reescriben. No es el overlay tulum-dark: no pisa sombras ni degradés.
+*/
+.tulum-app .bg-white,
+.tulum-app .bg-white\/80,
+.tulum-app .bg-white\/85 {
+  background-color: var(--tulum-surface) !important;
 }
 
-.tulum-dark .bg-emerald-50,
-.tulum-dark .bg-green-50 {
-  background-color: rgba(16, 185, 129, 0.14) !important;
+.tulum-app .bg-slate-50,
+.tulum-app .bg-slate-50\/30,
+.tulum-app .bg-slate-50\/40,
+.tulum-app .bg-slate-50\/50,
+.tulum-app .bg-slate-50\/70,
+.tulum-app .bg-slate-50\/80,
+.tulum-app .bg-slate-100,
+.tulum-app .bg-slate-100\/80 {
+  background-color: var(--tulum-elevated) !important;
 }
 
-.tulum-dark .bg-amber-50,
-.tulum-dark .bg-yellow-50 {
-  background-color: rgba(245, 158, 11, 0.14) !important;
+.tulum-app .border-slate-50,
+.tulum-app .border-slate-100,
+.tulum-app .border-slate-200,
+.tulum-app .border-gray-200,
+.tulum-app .border-gray-100 {
+  border-color: var(--tulum-border) !important;
 }
 
-.tulum-dark .bg-red-50 {
-  background-color: rgba(239, 68, 68, 0.14) !important;
+.tulum-app .text-slate-950,
+.tulum-app .text-slate-900,
+.tulum-app .text-slate-800,
+.tulum-app .text-slate-700,
+.tulum-app .text-gray-900,
+.tulum-app .text-gray-800,
+.tulum-app .text-gray-700 {
+  color: var(--tulum-bone) !important;
 }
 
-.tulum-dark .border-slate-50,
-.tulum-dark .border-slate-100,
-.tulum-dark .border-slate-200,
-.tulum-dark .border-gray-200,
-.tulum-dark .border-gray-100 {
-  border-color: #334155 !important;
-}
-
-.tulum-dark .border-blue-100,
-.tulum-dark .border-blue-200 {
-  border-color: rgba(96, 165, 250, 0.28) !important;
-}
-
-.tulum-dark .border-emerald-100,
-.tulum-dark .border-emerald-200,
-.tulum-dark .border-green-100 {
-  border-color: rgba(52, 211, 153, 0.28) !important;
-}
-
-.tulum-dark .border-amber-100,
-.tulum-dark .border-amber-200,
-.tulum-dark .border-yellow-100 {
-  border-color: rgba(251, 191, 36, 0.3) !important;
-}
-
-.tulum-dark .border-red-100,
-.tulum-dark .border-red-200 {
-  border-color: rgba(248, 113, 113, 0.3) !important;
-}
-
-.tulum-dark .text-slate-950,
-.tulum-dark .text-slate-900,
-.tulum-dark .text-slate-800,
-.tulum-dark .text-gray-900,
-.tulum-dark .text-gray-800 {
-  color: #f8fafc !important;
-}
-
-.tulum-dark .text-slate-700,
-.tulum-dark .text-slate-600,
-.tulum-dark .text-gray-700,
-.tulum-dark .text-gray-600 {
-  color: #cbd5e1 !important;
-}
-
-.tulum-dark .text-slate-500,
-.tulum-dark .text-slate-400,
-.tulum-dark .text-gray-500,
-.tulum-dark .text-gray-400 {
-  color: #94a3b8 !important;
-}
-
-.tulum-dark input,
-.tulum-dark select,
-.tulum-dark textarea {
-  background-color: #0b1220 !important;
-  border-color: #334155 !important;
-  color: #e2e8f0 !important;
-}
-
-.tulum-dark input:focus,
-.tulum-dark select:focus,
-.tulum-dark textarea:focus {
-  background-color: #111827 !important;
-  border-color: #60a5fa !important;
-}
-
-.tulum-dark input::placeholder,
-.tulum-dark textarea::placeholder {
-  color: #64748b !important;
-}
-
-.tulum-dark option {
-  background-color: #0f172a;
-  color: #e2e8f0;
-}
-
-.tulum-dark pre {
-  background-color: #020617 !important;
-  color: #cbd5e1 !important;
-}
-
-.tulum-dark table {
-  color: #cbd5e1;
-}
-
-.tulum-dark thead,
-.tulum-dark .bg-gradient-to-r.from-slate-50 {
-  background: #111827 !important;
-}
-
-.tulum-dark tbody.divide-y > :not([hidden]) ~ :not([hidden]) {
-  border-color: #1f2937 !important;
-}
-
-.tulum-dark .hover\:bg-slate-50:hover,
-.tulum-dark .hover\:bg-blue-50\/30:hover {
-  background-color: rgba(30, 41, 59, 0.85) !important;
-}
-
-.tulum-dark .shadow-sm,
-.tulum-dark .shadow-lg,
-.tulum-dark .shadow-xl,
-.tulum-dark .shadow-2xl {
-  --tw-shadow-color: rgba(0, 0, 0, 0.35) !important;
+.tulum-app .hover\:bg-slate-50:hover,
+.tulum-app .hover\:bg-slate-100:hover,
+.tulum-app .hover\:bg-blue-50\/30:hover {
+  background-color: var(--tulum-elevated) !important;
 }

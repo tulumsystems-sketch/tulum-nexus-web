@@ -16,6 +16,10 @@ import {
 } from '../../utils/tenantConfig';
 import { getSufijoUnidad, getUnidadDeProducto } from '../../utils/unidadMedida';
 import { imprimirTicket } from '../../utils/ticketTemplate';
+import { AppButton } from '../../components/ui/AppButton';
+import { ErrorAlert } from '../../components/ui/ErrorAlert';
+import { fieldClass } from '../../components/ui/fieldStyles';
+import { PosRestaurante } from './PosRestaurante';
 
 /**
  * POS - Point Of Sale (Modo Zen Redesign)
@@ -27,6 +31,9 @@ interface Producto {
   precio: number;
   imageUrl?: string;
   cantidadStock: number;
+  tipo?: string;
+  receta?: any[];
+  porcionesEstimadas?: number;
   categoria?: { id: number; nombre: string; unidadMedida?: string };
   codigoBarras?: string;
 }
@@ -47,8 +54,9 @@ const fetcher = (url: string) => apiClient.get(url).then((res) => res.data);
 export const POS: React.FC = () => {
   const navigate = useNavigate();
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const { isFeatureEnabled } = useTenantFeatures();
+  const { isFeatureEnabled, isLoading: featuresLoading } = useTenantFeatures();
   const barcodeEnabled = isFeatureEnabled('POS_BARCODE');
+  const esRestaurante = isFeatureEnabled('MESAS');
   
   // SWR: Preferencias y Config
   const { data: globalConfig } = useSWR('/config', fetcher);
@@ -222,6 +230,7 @@ export const POS: React.FC = () => {
 
     const payload = {
       clienteId,
+      canal: 'MOSTRADOR',
       items: cart.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })),
       metodoPago,
       ...(metodoPago === 'EFECTIVO' && { montoAbonado: Number(montoAbonado) }),
@@ -270,415 +279,439 @@ export const POS: React.FC = () => {
   const handleImprimir = (venta: any) => imprimirTicket(venta, globalConfig);
 
 
-  // Overlay de validación de Caja Cerrada
+  if (featuresLoading) {
+    return (
+      <div className="tulum-app fixed inset-0 z-[200] flex items-center justify-center bg-tulum-ink text-tulum-muted text-sm">
+        <Clock className="mr-2 h-5 w-5 animate-spin text-tulum-accent" />
+        Cargando mostrador…
+      </div>
+    );
+  }
+
   if (!isLoadingCaja && (!cajaEstado || cajaEstado.estado === 'CERRADA')) {
     return (
-      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-slate-900 text-white backdrop-blur-md">
-        <div className="text-center p-8 bg-white/5 rounded-3xl border border-white/10 shadow-2xl max-w-sm animate-in zoom-in-95 duration-300">
-           <div className="w-16 h-16 mx-auto bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mb-4 border border-amber-500/30">
-             <Clock className="w-8 h-8" />
-           </div>
-           <h2 className="text-xl font-black mb-2 tracking-tight">Turno Cerrado</h2>
-           <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-             Abrí un turno desde el Dashboard para vender. A las 24 horas la caja se cierra sola; si hay que ajustar el efectivo, se hace con un descargo.
-           </p>
-           <button 
-             onClick={() => navigate('/dashboard')}
-             className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/20"
-           >
-             <ArrowLeft className="w-4 h-4" /> Ir al Dashboard
-           </button>
+      <div className="tulum-app fixed inset-0 z-[200] flex flex-col items-center justify-center bg-tulum-ink text-tulum-bone">
+        <div className="text-center p-8 bg-tulum-surface rounded-2xl border border-tulum-border max-w-sm">
+          <div className="w-14 h-14 mx-auto bg-tulum-warning/15 text-tulum-warning rounded-lg flex items-center justify-center mb-4 border border-tulum-warning/30">
+            <Clock className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-semibold mb-2 tracking-tight">Turno cerrado</h2>
+          <p className="text-tulum-muted text-sm mb-6 leading-relaxed">
+            Abrí un turno desde el dashboard para vender. A las 24 horas la caja se cierra sola; si hay que ajustar el efectivo, se hace con un descargo.
+          </p>
+          <AppButton className="w-full" icon={ArrowLeft} onClick={() => navigate('/dashboard')}>
+            Ir al dashboard
+          </AppButton>
         </div>
       </div>
     );
   }
 
+  if (esRestaurante) {
+    return <PosRestaurante nombreEmpresa={globalConfig?.nombreEmpresa} />;
+  }
+
   return (
-    <div className="tulum-dark h-screen w-screen flex flex-col md:flex-row bg-slate-950 font-sans text-slate-100 overflow-hidden relative">
-      
-      {/* Lado Izquierdo: Buscador + Grilla (Modo Zen) */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950">
-         <header className="px-3 py-3 md:px-6 md:py-5 bg-slate-950 text-white border-b border-slate-800 flex items-center gap-2 md:gap-4 sticky top-0 z-10 flex-shrink-0 shadow-xl shadow-slate-300/30">
-           <button 
-             onClick={() => navigate('/dashboard')}
-             className="px-2 py-2 md:px-3 bg-white/10 border border-white/10 rounded-xl hover:bg-white hover:text-slate-900 text-slate-200 transition-all font-bold text-xs flex items-center gap-1 md:gap-1.5 shadow-sm flex-shrink-0"
-             title="Volver"
-           >
-             <ArrowLeft className="w-4 h-4" />
-             <span className="hidden sm:inline">Dashboard</span>
-           </button>
+    <div className="tulum-app h-screen w-screen flex flex-col md:flex-row bg-tulum-ink font-sans text-tulum-bone overflow-hidden relative">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-tulum-ink">
+        <header className="px-3 py-3 md:px-5 md:py-4 bg-tulum-ink border-b border-tulum-border flex items-center gap-2 md:gap-4 sticky top-0 z-10 flex-shrink-0">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="px-2 py-2 md:px-3 border border-tulum-border bg-tulum-elevated rounded-lg hover:bg-tulum-surface text-tulum-bone transition-colors font-semibold text-xs flex items-center gap-1.5 flex-shrink-0"
+            title="Volver"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Volver</span>
+          </button>
+          <div className="hidden sm:block min-w-0 max-w-[10rem] lg:max-w-xs">
+            <p className="text-sm font-semibold text-tulum-bone truncate">{globalConfig?.nombreEmpresa || 'Tulum'}</p>
+            <p className="text-[11px] text-tulum-muted">Mostrador</p>
+          </div>
 
-           <div className="flex-1 relative">
-              <Search className="absolute left-4 top-3.5 text-slate-400 w-5 h-5" />
-              <input 
-                ref={searchInputRef}
-                type="text" 
-                placeholder={barcodeEnabled ? 'Buscar o escanear codigo de barras...' : 'Buscar productos...'}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={barcodeEnabled ? handleSearchKeyDown : undefined}
-                className="w-full pl-10 md:pl-12 pr-20 py-2.5 md:py-3.5 rounded-2xl border-2 border-slate-100 focus:border-blue-500 outline-none transition-all text-sm font-bold bg-slate-50 focus:bg-white shadow-inner"
-              />
-              {barcodeEnabled && isBarcodeLoading && (
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase tracking-widest text-blue-500">
-                  Leyendo
-                </span>
-              )}
-           </div>
-           <div className="hidden lg:block rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-right">
-             <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total actual</div>
-             <div className="text-lg font-black text-white">${totalVenta.toFixed(2)}</div>
-           </div>
-         </header>
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-tulum-muted w-4 h-4" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder={barcodeEnabled ? 'Buscar o escanear código…' : 'Buscar productos…'}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={barcodeEnabled ? handleSearchKeyDown : undefined}
+              className={`${fieldClass} pl-10 pr-20`}
+            />
+            {barcodeEnabled && isBarcodeLoading && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold uppercase tracking-wide text-tulum-accent">
+                Leyendo
+              </span>
+            )}
+          </div>
+          <div className="hidden lg:block rounded-lg border border-tulum-border bg-tulum-surface px-4 py-2 text-right">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-tulum-muted">Total</div>
+            <div className="text-lg font-bold text-tulum-bone">${totalVenta.toFixed(2)}</div>
+          </div>
+        </header>
 
-          {apiError && (
-            <div className="mx-3 md:mx-6 mt-3 md:mt-6 px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
-              <span className="flex-1">{apiError}</span>
-              <button onClick={() => setApiError(null)} className="text-red-400 hover:text-red-600 p-1"><X className="w-3.5 h-3.5" /></button>
+        {apiError && (
+          <div className="mx-3 md:mx-5 mt-3">
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <ErrorAlert message={apiError} />
+              </div>
+              <button type="button" onClick={() => setApiError(null)} className="mt-2 p-1 text-tulum-muted hover:text-tulum-bone">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto p-3 md:p-5 min-h-0 pb-24 md:pb-5">
+          {isLoadingProductos ? (
+            <div className="flex items-center justify-center h-full text-tulum-muted text-sm font-medium">
+              <Clock className="w-5 h-5 animate-spin text-tulum-accent mr-2" /> Cargando catálogo…
+            </div>
+          ) : Array.isArray(productos) && productos.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
+              {productos.map((p: Producto) => (
+                <button
+                  key={p.id}
+                  onClick={() => handleAddProduct(p)}
+                  disabled={Number(p.cantidadStock || 0) <= 0}
+                  className="group flex flex-col bg-tulum-surface border border-tulum-border rounded-2xl overflow-hidden text-left relative focus:outline-none focus:ring-2 focus:ring-tulum-accent/30 disabled:opacity-50"
+                >
+                  <div className="aspect-square w-full bg-tulum-elevated flex items-center justify-center relative overflow-hidden p-3">
+                    {p.imageUrl ? (
+                      <img src={p.imageUrl} alt={p.nombre} className="object-contain w-full h-full" />
+                    ) : (
+                      <ShoppingBag className="w-10 h-10 text-tulum-muted" />
+                    )}
+                    {Number(p.cantidadStock || 0) <= 0 && (
+                      <div className="absolute inset-0 bg-tulum-ink/80 flex items-center justify-center text-tulum-bone font-semibold text-xs uppercase tracking-wide">
+                        Sin stock
+                      </div>
+                    )}
+                    {Number(p.cantidadStock || 0) > 0 && Number(p.cantidadStock || 0) <= 5 && (
+                      <span className="absolute left-2 top-2 rounded-full border border-tulum-warning/30 bg-tulum-warning/15 px-2 py-0.5 text-[10px] font-semibold text-tulum-warning">
+                        Bajo stock
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-2.5 md:p-3 w-full border-t border-tulum-border">
+                    <h4 className="font-semibold text-xs md:text-sm text-tulum-bone line-clamp-1 mb-0.5">{p.nombre}</h4>
+                    {barcodeEnabled && p.codigoBarras && (
+                      <p className="mb-1 truncate font-mono text-[10px] font-medium text-tulum-muted">{p.codigoBarras}</p>
+                    )}
+                    <p className="text-tulum-accent font-bold text-sm md:text-base">
+                      ${Number(p.precio).toFixed(2)}
+                      <span className="ml-1 text-[10px] font-medium text-tulum-muted">/ {getSufijoUnidad(getUnidadDeProducto(p))}</span>
+                    </p>
+                    <p className={`text-[10px] font-medium mt-1 ${Number(p.cantidadStock || 0) <= 5 ? 'text-tulum-danger' : 'text-tulum-muted'}`}>
+                      Stock: {p.cantidadStock} {getSufijoUnidad(getUnidadDeProducto(p))}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center text-center text-tulum-muted">
+              <ShoppingBag className="mb-3 h-10 w-10" />
+              <div className="font-semibold text-tulum-bone">No encontramos productos</div>
+              <div className="mt-1 text-sm font-medium">Probá con otra búsqueda o revisá el catálogo.</div>
             </div>
           )}
-
-          {/* Grid de Productos Scrollable */}
-          <div className="flex-1 overflow-y-auto p-3 md:p-6 min-h-0 pb-24 md:pb-6">
-           {isLoadingProductos ? (
-              <div className="flex items-center justify-center h-full text-slate-400/80 text-sm font-medium animate-pulse">
-                 <Clock className="w-5 h-5 animate-spin text-blue-500 mr-2" /> Cargando catálogo...
-              </div>
-           ) : Array.isArray(productos) && productos.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5">
-                 {productos.map((p: Producto) => (
-                    <button
-                      key={p.id}
-                      onClick={() => handleAddProduct(p)}
-                      disabled={p.cantidadStock <= 0}
-                      className="group flex flex-col bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm shadow-slate-200/70 hover:shadow-2xl hover:shadow-blue-100 hover:-translate-y-1 transition-all duration-300 text-left relative focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
-                    >
-                      <div className="aspect-square w-full bg-gradient-to-br from-slate-100 to-white flex items-center justify-center relative overflow-hidden p-3">
-                        {p.imageUrl ? (
-                          <img src={p.imageUrl} alt={p.nombre} className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-300" />
-                        ) : (
-                          <ShoppingBag className="w-12 h-12 text-slate-300" />
-                        )}
-                        {p.cantidadStock <= 0 && (
-                          <div className="absolute inset-0 bg-slate-950/70 flex items-center justify-center text-white font-black text-xs uppercase tracking-widest">Sin stock</div>
-                        )}
-                        {p.cantidadStock > 0 && p.cantidadStock <= 5 && (
-                          <span className="absolute left-3 top-3 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">Bajo stock</span>
-                        )}
-                      </div>
-
-                      <div className="p-2.5 md:p-4 bg-white w-full border-t border-slate-100">
-                          <h4 className="font-bold text-xs md:text-sm text-slate-800 line-clamp-1 mb-0.5 md:mb-1 group-hover:text-blue-600 transition-colors">{p.nombre}</h4>
-                          {barcodeEnabled && p.codigoBarras && (
-                            <p className="mb-1 truncate font-mono text-[10px] font-bold text-slate-400">{p.codigoBarras}</p>
-                          )}
-                          <p className="text-blue-600 font-extrabold text-sm md:text-base">
-                            ${Number(p.precio).toFixed(2)}
-                            <span className="ml-1 text-[10px] font-bold text-slate-400">/ {getSufijoUnidad(getUnidadDeProducto(p))}</span>
-                          </p>
-                          <p className={`text-[10px] font-bold mt-1 ${p.cantidadStock <= 5 ? 'text-red-500' : 'text-slate-400'}`}>Stock: {p.cantidadStock} {getSufijoUnidad(getUnidadDeProducto(p))}</p>
-                      </div>
-                    </button>
-                 ))}
-              </div>
-           ) : (
-              <div className="flex h-full flex-col items-center justify-center text-center text-slate-400">
-                 <ShoppingBag className="mb-3 h-12 w-12 text-slate-200" />
-                 <div className="font-bold text-slate-600">No encontramos productos</div>
-                 <div className="mt-1 text-sm font-medium">Proba con otra busqueda o revisa el catalogo.</div>
-              </div>
-           )}
-         </div>
+        </div>
       </div>
 
-      {/* Floating Cart Button (mobile only) */}
       <button
         onClick={() => setShowMobileCart(true)}
-        className="md:hidden fixed bottom-6 right-6 z-30 w-16 h-16 bg-blue-600 text-white rounded-full shadow-xl shadow-blue-500/30 flex items-center justify-center active:scale-95 transition-transform"
+        className="md:hidden fixed bottom-6 right-6 z-30 w-14 h-14 bg-tulum-accent text-white rounded-full flex items-center justify-center"
+        aria-label="Ver cuenta"
       >
-        <ShoppingBag className="w-7 h-7" />
+        <ShoppingBag className="w-6 h-6" />
         {cart.length > 0 && (
-          <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs font-black rounded-full flex items-center justify-center shadow-lg">
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-tulum-danger text-white text-[10px] font-semibold rounded-full flex items-center justify-center">
             {cart.length}
           </span>
         )}
       </button>
 
-      {/* Mobile Cart Backdrop */}
       {showMobileCart && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          className="md:hidden fixed inset-0 z-40 bg-black/50"
           onClick={() => setShowMobileCart(false)}
         />
       )}
 
-      {/* Lado Derecho: Carrito de Compras (Fixed Sticky Panel) */}
-      <div className={`fixed inset-y-0 right-0 z-50 w-full sm:w-96 flex flex-col h-full bg-white border-l border-slate-200 flex-shrink-0 shadow-2xl shadow-slate-300 transition-transform duration-300 md:static md:w-96 md:translate-x-0 md:z-20 ${showMobileCart ? 'translate-x-0' : 'translate-x-full'}`}>
-         <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center gap-2">
-            {/* Close button (mobile only) */}
-            <button
-              onClick={() => setShowMobileCart(false)}
-              className="md:hidden p-1.5 -ml-2 mr-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <ShoppingBag className="w-5 h-5 text-blue-600 font-bold" />
-            <h3 className="font-black text-base text-slate-900 tracking-tight">Orden Actual</h3>
-            <span className="text-xs bg-blue-50 font-black text-blue-700 px-2.5 py-1 rounded-full ml-auto">
-               {cart.length} ítems
-            </span>
-         </div>
+      <div className={`fixed inset-y-0 right-0 z-50 w-full sm:w-96 flex flex-col h-full bg-tulum-surface border-l border-tulum-border flex-shrink-0 transition-transform duration-300 md:static md:w-96 md:translate-x-0 md:z-20 ${showMobileCart ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="px-5 py-4 border-b border-tulum-border flex items-center gap-2">
+          <button
+            onClick={() => setShowMobileCart(false)}
+            className="md:hidden p-1.5 -ml-1 mr-1 text-tulum-muted hover:text-tulum-bone hover:bg-tulum-elevated rounded-lg"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <ShoppingBag className="w-5 h-5 text-tulum-accent" />
+          <h3 className="font-semibold text-base text-tulum-bone tracking-tight">Cuenta</h3>
+          <span className="text-xs font-semibold text-tulum-muted px-2 py-1 rounded-full ml-auto border border-tulum-border">
+            {cart.length} ítems
+          </span>
+        </div>
 
-         {/* Cart Items List */}
-         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 min-h-0">
-            {cart.length === 0 ? (
-               <div className="flex flex-col items-center justify-center h-full text-slate-400/80 italic text-sm">
-                  <ShoppingBag className="w-10 h-10 text-slate-100 mb-2" /> Carrito Vacío
-               </div>
-            ) : (
-               cart.map((i) => (
-                  <div key={i.productoId} className="flex gap-3 bg-white border border-slate-200 rounded-2xl p-3 items-center group shadow-sm shadow-slate-200/60">
-                     {i.imageUrl ? (
-                        <img src={i.imageUrl} alt={i.nombre} className="w-12 h-12 object-contain rounded-xl flex-shrink-0 bg-white p-1 border" />
-                     ) : (
-                        <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 border">
-                           <ShoppingBag className="w-5 h-5" />
-                        </div>
-                     )}
-                      <div className="flex-1 min-w-0">
-                         <h4 className="font-bold text-slate-800 text-sm line-clamp-1">{i.nombre}</h4>
-                         <p className="text-xs font-black text-blue-600">${i.precio.toFixed(2)} / {getSufijoUnidad(i.unidadMedida)}</p>
-                         <p className={`text-[10px] font-bold ${getProductStock(i.productoId) <= 5 ? 'text-red-400' : 'text-slate-400'}`}>Stock disp: {getProductStock(i.productoId)} {getSufijoUnidad(i.unidadMedida)}</p>
-                         
-                         <div className="flex items-center gap-2 mt-2">
-                            <button onClick={() => handleUpdateQuantity(i.productoId, i.cantidad - 1)} className="p-1 border bg-white border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"><Minus className="w-3.5 h-3.5" /></button>
-                            <span className="font-black text-xs text-slate-800 w-4 text-center">{i.cantidad}</span>
-                            <button onClick={() => handleUpdateQuantity(i.productoId, i.cantidad + 1)} disabled={i.cantidad >= getProductStock(i.productoId)} className="p-1 border bg-white border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"><Plus className="w-3.5 h-3.5" /></button>
-                         </div>
-                      </div>
-                     <button onClick={() => handleRemoveItem(i.productoId)} className="text-slate-400 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity p-1"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-               ))
-            )}
-         </div>
-
-         {/* Bottom Resumen y Acción */}
-         <div className="p-6 border-t border-slate-100 bg-slate-950 text-white space-y-4 flex-shrink-0">
-            <div className="space-y-1">
-               {muestraIva && (
-                 <div className="flex justify-between text-xs text-slate-400 font-bold">
-                    <span>Neto:</span>
-                    <span className="text-slate-200">${subtotalNeto.toFixed(2)}</span>
-                 </div>
-               )}
-               {muestraIva && (
-                 <div className="flex justify-between text-xs text-slate-400 font-bold border-b border-slate-800 pb-1.5">
-                    <span>IVA ({ivaPorcentaje}%):</span>
-                    <span className="text-slate-200">${calculoIva.toFixed(2)}</span>
-                 </div>
-               )}
-               <div className="flex justify-between items-baseline pt-2">
-                  <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total Operación</span>
-                  <span className="text-3xl font-black text-white tracking-tighter">
-                     ${totalVenta.toFixed(2)}
-                  </span>
-               </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2 min-h-0">
+          {cart.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-tulum-muted text-sm">
+              <ShoppingBag className="w-8 h-8 mb-2" /> Vacío
             </div>
+          ) : (
+            cart.map((i) => (
+              <div key={i.productoId} className="flex gap-3 bg-tulum-elevated border border-tulum-border rounded-xl p-3 items-center group">
+                {i.imageUrl ? (
+                  <img src={i.imageUrl} alt={i.nombre} className="w-12 h-12 object-contain rounded-lg flex-shrink-0 bg-tulum-ink p-1 border border-tulum-border" />
+                ) : (
+                  <div className="w-12 h-12 rounded-lg bg-tulum-ink flex items-center justify-center text-tulum-muted border border-tulum-border">
+                    <ShoppingBag className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-tulum-bone text-sm line-clamp-1">{i.nombre}</h4>
+                  <p className="text-xs font-semibold text-tulum-accent">${i.precio.toFixed(2)} / {getSufijoUnidad(i.unidadMedida)}</p>
+                  <p className={`text-[10px] font-medium ${getProductStock(i.productoId) <= 5 ? 'text-tulum-danger' : 'text-tulum-muted'}`}>
+                    Stock: {getProductStock(i.productoId)} {getSufijoUnidad(i.unidadMedida)}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button type="button" onClick={() => handleUpdateQuantity(i.productoId, i.cantidad - 1)} className="p-1 border border-tulum-border bg-tulum-surface rounded text-tulum-bone hover:bg-tulum-ink">
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="font-bold text-xs text-tulum-bone w-4 text-center">{i.cantidad}</span>
+                    <button type="button" onClick={() => handleUpdateQuantity(i.productoId, i.cantidad + 1)} disabled={i.cantidad >= getProductStock(i.productoId)} className="p-1 border border-tulum-border bg-tulum-surface rounded text-tulum-bone hover:bg-tulum-ink disabled:opacity-30">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <button type="button" onClick={() => handleRemoveItem(i.productoId)} className="text-tulum-muted hover:text-tulum-danger p-1">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
 
-            <button 
-              onClick={() => { setIsDrawerOpen(true); setShowMobileCart(false); }}
-              disabled={cart.length === 0}
-              className="w-full py-4 text-base font-black text-slate-950 bg-white rounded-2xl shadow-lg shadow-white/10 hover:bg-blue-50 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2 active:translate-y-0.5"
-            >
-               Finalizar Venta
-            </button>
-         </div>
+        <div className="p-5 border-t border-tulum-border bg-tulum-ink space-y-4 flex-shrink-0">
+          <div className="space-y-1">
+            {muestraIva && (
+              <div className="flex justify-between text-xs text-tulum-muted font-medium">
+                <span>Neto</span>
+                <span className="text-tulum-bone">${subtotalNeto.toFixed(2)}</span>
+              </div>
+            )}
+            {muestraIva && (
+              <div className="flex justify-between text-xs text-tulum-muted font-medium border-b border-tulum-border pb-1.5">
+                <span>IVA ({ivaPorcentaje}%)</span>
+                <span className="text-tulum-bone">${calculoIva.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-baseline pt-2">
+              <span className="text-xs font-semibold text-tulum-muted uppercase tracking-wide">Total</span>
+              <span className="text-3xl font-bold text-tulum-bone tracking-tight">
+                ${totalVenta.toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          <AppButton
+            className="w-full py-4 text-base"
+            disabled={cart.length === 0}
+            onClick={() => { setIsDrawerOpen(true); setShowMobileCart(false); }}
+          >
+            Cobrar
+          </AppButton>
+        </div>
       </div>
 
-      {/* Drawer Cierre Venta UX */}
       {isDrawerOpen && (
-         <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 flex justify-end">
-            <div className="bg-white h-full w-full max-w-full sm:max-w-md p-6 sm:p-8 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 relative overflow-y-auto">
-               
-               <button onClick={() => setIsDrawerOpen(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all">
-                  <X className="w-6 h-6" />
-               </button>
+        <div className="fixed inset-0 z-[150] bg-tulum-ink/70 flex justify-end">
+          <div className="bg-tulum-surface h-full w-full max-w-full sm:max-w-md p-6 sm:p-8 flex flex-col relative overflow-y-auto border-l border-tulum-border">
+            <button type="button" onClick={() => setIsDrawerOpen(false)} className="absolute top-6 right-6 text-tulum-muted hover:text-tulum-bone p-1 rounded-lg hover:bg-tulum-elevated">
+              <X className="w-6 h-6" />
+            </button>
 
-               <h3 className="text-2xl font-black text-slate-800 mb-8 tracking-tight border-b pb-4 border-slate-100">Cierre de Operación</h3>
-               
-               {apiError && <div className="p-3 mb-4 text-xs font-bold bg-red-50 text-red-600 border border-red-100 rounded-xl">{apiError}</div>}
+            <h3 className="text-xl font-semibold text-tulum-bone mb-6 tracking-tight border-b pb-4 border-tulum-border">Cobro</h3>
 
-               <form onSubmit={handleFinalizarVenta} className="space-y-6 flex-1 flex flex-col justify-between">
-                  <div className="space-y-6">
-                     {clientesHabilitados && (
-                       <div className="space-y-2">
-                         <label className="block text-sm font-black text-slate-700 uppercase tracking-wide">Cliente</label>
-                         {clienteSeleccionado ? (
-                           <div className="flex items-center gap-3 p-3 border-2 border-indigo-200 bg-indigo-50/50 rounded-2xl">
-                             <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center flex-shrink-0">
-                               <User className="w-4 h-4" />
-                             </div>
-                             <div className="flex-1 min-w-0">
-                               <div className="font-bold text-sm text-slate-800 truncate">{nombreCliente(clienteSeleccionado)}</div>
-                               {clienteSeleccionado.empresa && (
-                                 <div className="text-xs font-semibold text-slate-500 truncate">{clienteSeleccionado.empresa}</div>
-                               )}
-                             </div>
-                             <button
-                               type="button"
-                               onClick={() => setClienteId(null)}
-                               className="px-3 py-1.5 text-xs font-black text-slate-500 bg-white border border-slate-200 rounded-lg hover:text-slate-800 hover:bg-slate-50 transition-colors"
-                             >
-                               Quitar
-                             </button>
-                           </div>
-                         ) : (
-                           <div className="space-y-2">
-                             <div className="relative">
-                               <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                               <input
-                                 type="text"
-                                 value={clienteSearch}
-                                 onChange={(e) => setClienteSearch(e.target.value)}
-                                 placeholder="Buscar cliente por nombre o empresa..."
-                                 className="w-full pl-9 pr-4 py-2.5 text-sm font-bold text-slate-700 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-indigo-400 focus:bg-white transition-all"
-                               />
-                             </div>
-                             {clienteSearch.trim() !== '' && (
-                               <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-100 divide-y divide-slate-100">
-                                 {clientesFiltrados.length > 0 ? clientesFiltrados.map((c: any) => (
-                                   <button
-                                     key={c.id}
-                                     type="button"
-                                     onClick={() => { setClienteId(c.id); setClienteSearch(''); }}
-                                     className="w-full px-3 py-2.5 text-left hover:bg-indigo-50 transition-colors"
-                                   >
-                                     <div className="text-sm font-bold text-slate-700">{nombreCliente(c)}</div>
-                                     {c.empresa && <div className="text-xs font-semibold text-slate-400">{c.empresa}</div>}
-                                   </button>
-                                 )) : (
-                                   <div className="px-3 py-3 text-xs font-bold text-slate-400 italic">Sin resultados.</div>
-                                 )}
-                               </div>
-                             )}
-                             <p className="text-xs font-bold text-slate-400">
-                               Sin cliente seleccionado la venta se registra como Consumidor Final.
-                             </p>
-                           </div>
-                         )}
-                       </div>
-                     )}
+            {apiError && <div className="mb-4"><ErrorAlert message={apiError} /></div>}
 
-                     <label className="block text-sm font-black text-slate-700 uppercase tracking-wide">Método de Pago</label>
-                      <div className={`grid ${metodosHabilitados.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
-                         {metodosHabilitados.map((metodo) => (
-                           <label
-                             key={metodo.value}
-                             className={`flex flex-col items-center justify-center p-5 border-2 rounded-2xl cursor-pointer transition-all text-center ${
-                               metodoPago === metodo.value
-                                 ? 'border-indigo-500 bg-indigo-50/30 text-indigo-800 font-bold shadow-md'
-                                 : 'border-slate-100 hover:border-slate-200 text-slate-500 bg-slate-50'
-                             }`}
-                           >
-                             <input
-                               type="radio"
-                               value={metodo.value}
-                               checked={metodoPago === metodo.value}
-                               onChange={() => setMetodoPago(metodo.value)}
-                               className="sr-only"
-                             />
-                             <span className="text-xs font-bold">{metodo.label}</span>
-                           </label>
-                         ))}
-                      </div>
-
-                     {metodoPago === 'TRANSFERENCIA' && aliasCobro && (
-                        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-center">
-                           <div className="text-xs font-black text-blue-700 uppercase tracking-widest">Alias para transferencias</div>
-                           <div className="mt-1 text-lg font-black text-blue-900 font-mono break-all">{aliasCobro}</div>
+            <form onSubmit={handleFinalizarVenta} className="space-y-6 flex-1 flex flex-col justify-between">
+              <div className="space-y-6">
+                {clientesHabilitados && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-tulum-muted">Cliente</label>
+                    {clienteSeleccionado ? (
+                      <div className="flex items-center gap-3 p-3 border border-tulum-accent/40 bg-tulum-accent/10 rounded-xl">
+                        <div className="w-9 h-9 rounded-lg bg-tulum-elevated text-tulum-accent flex items-center justify-center flex-shrink-0">
+                          <User className="w-4 h-4" />
                         </div>
-                     )}
-
-                     {metodoPago === 'EFECTIVO' && (
-                        <div className="bg-slate-900 p-6 rounded-3xl text-white space-y-4 shadow-xl">
-                           <div className="space-y-2">
-                              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Paga con:</label>
-                              <div className="relative">
-                                 <span className="absolute left-0 top-1 text-3xl font-black text-slate-500">$</span>
-                                 <input 
-                                   type="number" 
-                                   step="0.01" 
-                                   min={totalVenta} 
-                                   required 
-                                   placeholder="0.00"
-                                   value={montoAbonado}
-                                   onChange={(e) => setMontoAbonado(e.target.value === '' ? '' : Number(e.target.value))}
-                                   className="w-full pl-8 py-2 bg-transparent outline-none border-b-2 border-slate-700 focus:border-yellow-400 text-4xl font-black text-white transition-colors"
-                                 />
-                              </div>
-                           </div>
-
-                           {montoAbonado !== '' && Number(montoAbonado) >= totalVenta && (
-                              <div className="border-t border-slate-800 pt-4 flex justify-between items-center">
-                                 <span className="text-xs font-bold text-slate-400 uppercase">Vuelto a entregar:</span>
-                                 <span className="text-yellow-400 font-black text-4xl tracking-tighter">${(Number(montoAbonado) - totalVenta).toFixed(2)}</span>
-                              </div>
-                           )}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm text-tulum-bone truncate">{nombreCliente(clienteSeleccionado)}</div>
+                          {clienteSeleccionado.empresa && (
+                            <div className="text-xs font-medium text-tulum-muted truncate">{clienteSeleccionado.empresa}</div>
+                          )}
                         </div>
-                     )}
-                  </div>
-
-                  <div className="space-y-4 border-t border-slate-100 pt-6">
-                     <div className="flex justify-between items-baseline mb-4">
-                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Operación</span>
-                        <div className="text-3xl font-black text-slate-900 tracking-tighter">${totalVenta.toFixed(2)}</div>
-                     </div>
-
-                     <div className="flex gap-3">
-                        <button type="button" onClick={() => setIsDrawerOpen(false)} className="px-4 py-4 font-bold text-slate-400 hover:text-slate-600 text-sm">Cancelar</button>
-                        <button type="submit" className={`flex-1 py-4 text-base font-black text-white rounded-2xl shadow-lg transition-all ${metodoPago === 'EFECTIVO' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                           Procesar Orden
+                        <button
+                          type="button"
+                          onClick={() => setClienteId(null)}
+                          className="px-3 py-1.5 text-xs font-semibold text-tulum-muted border border-tulum-border rounded-lg hover:text-tulum-bone hover:bg-tulum-elevated"
+                        >
+                          Quitar
                         </button>
-                     </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tulum-muted" />
+                          <input
+                            type="text"
+                            value={clienteSearch}
+                            onChange={(e) => setClienteSearch(e.target.value)}
+                            placeholder="Buscar cliente…"
+                            className={`${fieldClass} pl-9`}
+                          />
+                        </div>
+                        {clienteSearch.trim() !== '' && (
+                          <div className="max-h-40 overflow-y-auto rounded-xl border border-tulum-border divide-y divide-tulum-border">
+                            {clientesFiltrados.length > 0 ? clientesFiltrados.map((c: any) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => { setClienteId(c.id); setClienteSearch(''); }}
+                                className="w-full px-3 py-2.5 text-left hover:bg-tulum-elevated"
+                              >
+                                <div className="text-sm font-semibold text-tulum-bone">{nombreCliente(c)}</div>
+                                {c.empresa && <div className="text-xs font-medium text-tulum-muted">{c.empresa}</div>}
+                              </button>
+                            )) : (
+                              <div className="px-3 py-3 text-xs font-medium text-tulum-muted">Sin resultados.</div>
+                            )}
+                          </div>
+                        )}
+                        <p className="text-xs font-medium text-tulum-muted">
+                          Sin cliente, se registra como Consumidor Final.
+                        </p>
+                      </div>
+                    )}
                   </div>
-               </form>
-            </div>
-         </div>
+                )}
+
+                <label className="block text-xs font-semibold text-tulum-muted">Método de pago</label>
+                <div className={`grid ${metodosHabilitados.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+                  {metodosHabilitados.map((metodo) => (
+                    <label
+                      key={metodo.value}
+                      className={`flex flex-col items-center justify-center p-4 border rounded-xl cursor-pointer text-center ${
+                        metodoPago === metodo.value
+                          ? 'border-tulum-accent bg-tulum-accent/15 text-tulum-bone font-semibold'
+                          : 'border-tulum-border text-tulum-muted bg-tulum-elevated'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        value={metodo.value}
+                        checked={metodoPago === metodo.value}
+                        onChange={() => setMetodoPago(metodo.value)}
+                        className="sr-only"
+                      />
+                      <span className="text-xs font-semibold">{metodo.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {metodoPago === 'TRANSFERENCIA' && aliasCobro && (
+                  <div className="p-4 bg-tulum-elevated border border-tulum-border rounded-xl text-center">
+                    <div className="text-xs font-semibold text-tulum-muted uppercase tracking-wide">Alias</div>
+                    <div className="mt-1 text-lg font-bold text-tulum-bone font-mono break-all">{aliasCobro}</div>
+                  </div>
+                )}
+
+                {metodoPago === 'EFECTIVO' && (
+                  <div className="bg-tulum-ink p-5 rounded-2xl text-tulum-bone space-y-4 border border-tulum-border">
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-tulum-muted uppercase tracking-wide">Paga con</label>
+                      <div className="relative">
+                        <span className="absolute left-0 top-1 text-3xl font-bold text-tulum-muted">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={totalVenta}
+                          required
+                          placeholder="0.00"
+                          value={montoAbonado}
+                          onChange={(e) => setMontoAbonado(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="w-full pl-8 py-2 bg-transparent outline-none border-b border-tulum-border focus:border-tulum-accent text-4xl font-bold text-tulum-bone"
+                        />
+                      </div>
+                    </div>
+
+                    {montoAbonado !== '' && Number(montoAbonado) >= totalVenta && (
+                      <div className="border-t border-tulum-border pt-4 flex justify-between items-center">
+                        <span className="text-xs font-semibold text-tulum-muted uppercase">Vuelto</span>
+                        <span className="text-tulum-warning font-bold text-4xl tracking-tight">${(Number(montoAbonado) - totalVenta).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4 border-t border-tulum-border pt-6">
+                <div className="flex justify-between items-baseline mb-2">
+                  <span className="text-xs font-semibold text-tulum-muted uppercase tracking-wide">Total</span>
+                  <div className="text-3xl font-bold text-tulum-bone tracking-tight">${totalVenta.toFixed(2)}</div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setIsDrawerOpen(false)} className="px-4 py-3 font-semibold text-tulum-muted hover:text-tulum-bone text-sm">
+                    Cancelar
+                  </button>
+                  <AppButton type="submit" className="flex-1 py-4 text-base">
+                    Confirmar
+                  </AppButton>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
-      {/* Modal Éxito Venta */}
       {successVentaId && (
-         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="bg-white rounded-3xl w-full max-w-sm mx-4 sm:mx-0 p-6 text-center animate-in zoom-in-95 duration-200 shadow-2xl relative">
-               <div className="w-16 h-16 mx-auto bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
-                  <CheckCircle className="w-8 h-8" />
-               </div>
-               <h3 className="text-xl font-black text-slate-800 tracking-tight">Venta Completada</h3>
-               
-               {vueltoFinal > 0 && (
-                  <div className="mt-2 bg-slate-900 p-5 rounded-2xl text-center shadow-lg">
-                     <p className="text-3xl font-black text-yellow-400 tracking-tighter">${vueltoFinal.toFixed(2)}</p>
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">💰 Vuelto a Entregar</p>
-                  </div>
-               )}
-
-               <p className="text-slate-500 text-xs mt-3 mb-6 font-medium">Comprobante asignado: <span className="font-bold text-blue-600">#{successVentaId}</span></p>
-
-               <div className="space-y-2">
-                  <button 
-                     onClick={() => handleImprimir(currentVentaPrint)} 
-                     className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/10"
-                  >
-                     Imprimir Ticket
-                  </button>
-
-
-                  <button onClick={() => { setSuccessVentaId(null); setVueltoFinal(0); }} className="w-full py-3 bg-slate-100 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">
-                     Continuar
-                  </button>
-               </div>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-tulum-ink/70">
+          <div className="bg-tulum-surface border border-tulum-border rounded-2xl w-full max-w-sm mx-4 p-6 text-center">
+            <div className="w-14 h-14 mx-auto bg-tulum-success/15 text-tulum-success rounded-lg flex items-center justify-center mb-4 border border-tulum-success/30">
+              <CheckCircle className="w-7 h-7" />
             </div>
-         </div>
+            <h3 className="text-xl font-semibold text-tulum-bone tracking-tight">Venta hecha</h3>
+
+            {vueltoFinal > 0 && (
+              <div className="mt-3 bg-tulum-ink p-5 rounded-xl text-center border border-tulum-border">
+                <p className="text-3xl font-bold text-tulum-warning tracking-tight">${vueltoFinal.toFixed(2)}</p>
+                <p className="text-[10px] font-semibold text-tulum-muted uppercase tracking-wide mt-1">Vuelto</p>
+              </div>
+            )}
+
+            <p className="text-tulum-muted text-xs mt-3 mb-6 font-medium">
+              Comprobante <span className="font-semibold text-tulum-accent">#{successVentaId}</span>
+            </p>
+
+            <div className="space-y-2">
+              <AppButton className="w-full" onClick={() => handleImprimir(currentVentaPrint)}>
+                Imprimir ticket
+              </AppButton>
+              <AppButton
+                variant="secondary"
+                className="w-full"
+                onClick={() => { setSuccessVentaId(null); setVueltoFinal(0); }}
+              >
+                Continuar
+              </AppButton>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
